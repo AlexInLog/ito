@@ -1,0 +1,76 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "debug-asan",
+      "displayName": "Debug + ASan + UBSan",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ITO_ENABLE_ASAN": "ON"
+      }
+    },
+    {
+      "name": "debug-tsan",
+      "displayName": "Debug + TSan",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ITO_ENABLE_TSAN": "ON"
+      }
+    },
+    {
+      "name": "lint",
+      "displayName": "Debug + clang-tidy",
+      "inherits": "debug",
+      "cacheVariables": {
+        "ITO_ENABLE_CLANG_TIDY": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "release",    "configurePreset": "release" },
+    { "name": "debug",      "configurePreset": "debug" },
+    { "name": "debug-asan", "configurePreset": "debug-asan" },
+    { "name": "debug-tsan", "configurePreset": "debug-tsan" },
+    { "name": "lint",       "configurePreset": "lint" }
+  ],
+  "testPresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    { "name": "release",    "inherits": "base", "configurePreset": "release" },
+    { "name": "debug",      "inherits": "base", "configurePreset": "debug" },
+    { "name": "lint",      "inherits": "base", "configurePreset": "lint" },
+    { "name": "debug-asan", "inherits": "base", "configurePreset": "debug-asan" },
+    { "name": "debug-tsan", "inherits": "base", "configurePreset": "debug-tsan" }
+  ]
+}
