@@ -4,14 +4,14 @@
 
 namespace ito
 {
-    class Executor;
+    class executor;
 
-    class Task
+    class task
     {
     public:
         struct promise_type // NOLINT (readability-identifier-naming.StructCase)
         {
-            Task get_return_object() { return Task{std::coroutine_handle<promise_type>::from_promise(*this)}; }
+            task get_return_object() { return task{std::coroutine_handle<promise_type>::from_promise(*this)}; }
 
             std::suspend_always initial_suspend() noexcept { return {}; }
             std::suspend_always final_suspend() noexcept { return {}; }
@@ -21,16 +21,15 @@ namespace ito
             void unhandled_exception() { }
         };
 
-        ~Task() noexcept
+        ~task() noexcept
         {
             if (m_h) m_h.destroy();
         }
 
-        friend class ito::Executor;
-
+        friend class ito::executor;
 
     private:
-        explicit Task(std::coroutine_handle<promise_type> h)
+        explicit task(std::coroutine_handle<promise_type> h)
             : m_h{h}
         {
         }

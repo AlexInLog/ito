@@ -32,8 +32,8 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 find_program(CCACHE ccache)
 if(CCACHE)
-  set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE})
-  set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE})
+    set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE})
 endif(CCACHE)
 
 
@@ -96,6 +96,25 @@ if(ITO_BUILD_TESTS)
     find_package(trompeloeil REQUIRED)
 
     enable_testing()
+
+    set(ITO_TEST_RESULTS_DIR  ${CMAKE_BINARY_DIR}/test_results)
+    file(MAKE_DIRECTORY ${ITO_TEST_RESULTS_DIR})
+    
+    set(ITO_COVERAGE_TARGETS -instr-profile=${ITO_TEST_RESULTS_DIR}/results.profdata -object $<TARGET_FILE:ito_tests>)
+
+    macro(discover_tests TARGET)
+        include(Catch)
+        catch_discover_tests(${TARGET} PROPERTIES  ENVIRONMENT "LLVM_PROFILE_FILE=${ITO_TEST_RESULTS_DIR}/${TARGET}.profraw" )
+    endmacro()
+
+    add_custom_target(
+        coverage
+        COMMAND llvm-profdata merge -o ${ITO_TEST_RESULTS_DIR}/results.profdata ${ITO_TEST_RESULTS_DIR}/*.profraw
+        COMMAND llvm-cov report --ignore-filename-regex=build ${ITO_COVERAGE_TARGETS}
+        COMMAND llvm-cov show --ignore-filename-regex=build --show-branches=count ${ITO_COVERAGE_TARGETS} > ${ITO_TEST_RESULTS_DIR}/coverage.txt
+        COMMENT "Generating coverage report"
+    )
+
     add_subdirectory(tests)
 endif()
 

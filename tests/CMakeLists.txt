@@ -10,5 +10,4 @@ target_link_libraries(ito_tests
         Catch2::Catch2WithMain
 )
 
-include(Catch)
-catch_discover_tests(ito_tests)
+discover_tests(ito_tests)

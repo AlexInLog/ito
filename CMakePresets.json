@@ -51,6 +51,14 @@
       "cacheVariables": {
         "ITO_ENABLE_CLANG_TIDY": "ON"
       }
+    },
+    {
+      "name": "coverage",
+      "displayName": "coverage",
+      "inherits": "release",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-O0 -g -fprofile-instr-generate -fcoverage-mapping"
+      }
     }
   ],
   "buildPresets": [
@@ -58,7 +66,8 @@
     { "name": "debug",      "configurePreset": "debug" },
     { "name": "debug-asan", "configurePreset": "debug-asan" },
     { "name": "debug-tsan", "configurePreset": "debug-tsan" },
-    { "name": "lint",       "configurePreset": "lint" }
+    { "name": "lint",       "configurePreset": "lint" },
+    { "name": "coverage",   "configurePreset": "coverage" }
   ],
   "testPresets": [
     {
@@ -71,6 +80,8 @@
     { "name": "debug",      "inherits": "base", "configurePreset": "debug" },
     { "name": "lint",      "inherits": "base", "configurePreset": "lint" },
     { "name": "debug-asan", "inherits": "base", "configurePreset": "debug-asan" },
-    { "name": "debug-tsan", "inherits": "base", "configurePreset": "debug-tsan" }
+    { "name": "debug-tsan", "inherits": "base", "configurePreset": "debug-tsan" },
+    { "name": "coverage",    "inherits": "base", "configurePreset": "coverage", "environment": {
+      } }
   ]
 }

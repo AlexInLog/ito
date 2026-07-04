@@ -4,12 +4,12 @@
 
 namespace ito
 {
-    class Executor
+    class executor
     {
     public:
-        Executor() = default;
+        executor() = default;
 
-        void run(ito::Task& task) {
+        void run(ito::task& task) {
             task.run();
         }
 

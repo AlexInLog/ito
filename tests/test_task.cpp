@@ -3,19 +3,19 @@
 #include <ito/executor.hpp>
 #include <coroutine>
 
-struct LifetimeTracker
+struct lifetime_tracker
 {
-    explicit LifetimeTracker(int& counter)
+    explicit lifetime_tracker(int& counter)
         : m_counter(counter)
     {
         ++m_counter;
     }
-    ~LifetimeTracker() { --m_counter; }
+    ~lifetime_tracker() { --m_counter; }
 
-    LifetimeTracker(const LifetimeTracker&)            = delete;
-    LifetimeTracker& operator=(const LifetimeTracker&) = delete;
-    LifetimeTracker(LifetimeTracker&&)                 = delete;
-    LifetimeTracker& operator=(LifetimeTracker&&)      = delete;
+    lifetime_tracker(const lifetime_tracker&)            = delete;
+    lifetime_tracker& operator=(const lifetime_tracker&) = delete;
+    lifetime_tracker(lifetime_tracker&&)                 = delete;
+    lifetime_tracker& operator=(lifetime_tracker&&)      = delete;
 
 private:
     int& m_counter;
@@ -27,12 +27,12 @@ TEST_CASE("base task checks")
     int alive          = 0;
     int caputure_alive = 0;
 
-    ito::Executor executor{};
+    ito::executor executor{};
 
     {
         int called{};
-        auto make_task = [&, c = LifetimeTracker{caputure_alive}]() -> ito::Task {
-            LifetimeTracker t(alive);
+        auto make_task = [&, c = lifetime_tracker{caputure_alive}]() -> ito::task {
+            lifetime_tracker t(alive);
             ++called;
             co_await std::suspend_always{};
             ++called;
