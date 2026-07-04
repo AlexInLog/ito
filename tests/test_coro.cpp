@@ -87,7 +87,7 @@ TEST_CASE("Validate base coroutine checks")
             REQUIRE(res == 42);
 
             SECTION("execute same coro twice") {
-                REQUIRE_THROWS_AS(ito::executor{}.run(std::move(coro)), ito::exceptions::invalid_coro_handle_state);
+                REQUIRE_THROWS_AS(ito::executor{}.run(std::move(coro)), ito::exceptions::invalid_coro_handle_state); // NOLINT (bugprone-use-after-move)
             }
         }
 
