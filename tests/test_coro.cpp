@@ -1,4 +1,4 @@
-#include "ito/exceptions.hpp"
+#include <ito/exceptions.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/trompeloeil.hpp>
 #include <ito/coro.hpp>
