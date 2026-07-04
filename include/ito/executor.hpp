@@ -1,6 +1,8 @@
 #pragma once
 
-#include <ito/task.hpp>
+#include <ito/coro.hpp>
+
+#include <utility>
 
 namespace ito
 {
@@ -9,10 +11,10 @@ namespace ito
     public:
         executor() = default;
 
-        void run(ito::task& task) {
-            task.run();
+        template<typename T>
+        T run(ito::coro<T>&& coro)
+        {
+            return std::move(coro).run();
         }
-
-    private:
     };
 } // namespace ito
