@@ -104,14 +104,14 @@ if(ITO_BUILD_TESTS)
 
     macro(discover_tests TARGET)
         include(Catch)
-        catch_discover_tests(${TARGET} PROPERTIES  ENVIRONMENT "LLVM_PROFILE_FILE=${ITO_TEST_RESULTS_DIR}/${TARGET}.profraw" )
+        catch_discover_tests(${TARGET} PROPERTIES  ENVIRONMENT "LLVM_PROFILE_FILE=${ITO_TEST_RESULTS_DIR}/${TARGET}-%p.profraw" )
     endmacro()
 
     add_custom_target(
         coverage
         COMMAND llvm-profdata merge -o ${ITO_TEST_RESULTS_DIR}/results.profdata ${ITO_TEST_RESULTS_DIR}/*.profraw
-        COMMAND llvm-cov report --ignore-filename-regex=build ${ITO_COVERAGE_TARGETS}
-        COMMAND llvm-cov show --ignore-filename-regex=build --show-branches=count ${ITO_COVERAGE_TARGETS} > ${ITO_TEST_RESULTS_DIR}/coverage.txt
+        COMMAND llvm-cov report --ignore-filename-regex=${CMAKE_BINARY_DIR} ${ITO_COVERAGE_TARGETS}
+        COMMAND llvm-cov show --ignore-filename-regex=${CMAKE_BINARY_DIR} --show-branches=count -show-instantiations=false ${ITO_COVERAGE_TARGETS} > ${ITO_TEST_RESULTS_DIR}/coverage.txt
         COMMENT "Generating coverage report"
     )
 
