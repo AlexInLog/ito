@@ -134,16 +134,14 @@ namespace ito
         {
         }
 
-        T run() &&
+        std::coroutine_handle<promise_type> detach() &&
         {
             if (!m_h)
             {
                 throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to run coro"};
             }
 
-            m_h.resume();
-            const auto _ = utils::finally{[this]() noexcept { std::exchange(m_h, {}).destroy(); }};
-            return m_h.promise().get_result();
+            return std::exchange(m_h, {});
         }
 
     private:
