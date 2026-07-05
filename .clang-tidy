@@ -1,7 +1,7 @@
 ---
 Checks:    'clang-diagnostic-*,clang-analyzer-*,bugprone-*,-bugprone-exception-escape,concurrency-*,performance-*,-macro*,readability-identifier-naming'
 WarningsAsErrors: '*'
-HeaderFilterRegex: './src/.*'
+HeaderFilterRegex: './include/.*'
 # AnalyzeTemporaryDtors: false
 FormatStyle: 'file'
 # HeaderFileExtensions:
