@@ -140,7 +140,7 @@ namespace ito
             {
                 throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to run coro"};
             }
-            
+
             m_h.resume();
             const auto _ = utils::finally{[this]() noexcept { std::exchange(m_h, {}).destroy(); }};
             return m_h.promise().get_result();
