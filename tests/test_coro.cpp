@@ -1,7 +1,7 @@
-#include <ito/exceptions.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/trompeloeil.hpp>
 #include <ito/coro.hpp>
+#include <ito/exceptions.hpp>
 #include <ito/executor.hpp>
 #include <trompeloeil/lifetime.hpp>
 #include <trompeloeil/mock.hpp>
@@ -86,8 +86,12 @@ TEST_CASE("Validate base coroutine checks")
             const auto res = ito::executor{}.run(std::move(coro));
             REQUIRE(res == 42);
 
-            SECTION("execute same coro twice") {
-                REQUIRE_THROWS_AS(ito::executor{}.run(std::move(coro)), ito::exceptions::invalid_coro_handle_state); // NOLINT (bugprone-use-after-move)
+            SECTION("execute same coro twice")
+            {
+                REQUIRE_THROWS_AS(
+                    ito::executor{}.run(std::move(coro)), // NOLINT (bugprone-use-after-move)
+                    ito::exceptions::invalid_coro_handle_state
+                );
             }
         }
 
@@ -101,6 +105,11 @@ TEST_CASE("Validate base coroutine checks")
             REQUIRE_CALL(*mock, call());
             const auto res = ito::executor{}.run(child_coro());
             REQUIRE(res == 44);
+
+            SECTION("execute same original coro twice via executing new child")
+            {
+                REQUIRE_THROWS_AS(ito::executor{}.run(child_coro()), ito::exceptions::invalid_coro_handle_state);
+            }
         }
         SECTION("run task from parent of another type")
         {
@@ -191,7 +200,8 @@ TEST_CASE("propogate exception")
     REQUIRE_THROWS_AS(ito::executor{}.run(std::move(task)), custom_error);
 }
 
-TEST_CASE("coro co_await suspend_always") {
+TEST_CASE("coro co_await suspend_always")
+{
     auto make_task = []() -> ito::coro<> {
         co_await std::suspend_always{};
         co_return;
@@ -199,4 +209,83 @@ TEST_CASE("coro co_await suspend_always") {
 
     auto task = make_task();
     REQUIRE_THROWS_AS(ito::executor{}.run(std::move(task)), ito::exceptions::empty_value);
+}
+
+TEST_CASE("nested co_await releases child coro exactly once")
+{
+    auto owner = std::make_unique<trompeloeil::deathwatched<lifetime_tracker>>();
+    auto mock  = owner.get();
+
+    auto make_child = [&]() -> ito::coro<std::unique_ptr<trompeloeil::deathwatched<lifetime_tracker>>> {
+        co_return std::move(owner);
+    };
+
+    auto child = make_child();
+
+    auto parent = [&]() -> ito::coro<std::unique_ptr<trompeloeil::deathwatched<lifetime_tracker>>> {
+        co_return co_await std::move(child);
+    };
+
+    auto result = ito::executor{}.run(parent());
+    REQUIRE(mock == result.get());
+
+    // Ресурс дошёл до нас живым: фрейм ребёнка не утащил его с собой при
+    // разрушении (это была бы утечка), и до этого момента он не был
+    // уничтожен преждевременно (это было бы use-after-free выше).
+    REQUIRE_DESTRUCTION(*mock);
+    result.reset();
+
+    // child уже "выпит" первым co_await. Раньше это было UB (resume
+    // коллапс на final_suspend), теперь должно быть контролируемое
+    // исключение -- и, что важно, без повторного вызова .destroy()
+    // на уже уничтоженном фрейме (иначе тут будет double-free).
+    auto parent2 = [&]() -> ito::coro<std::unique_ptr<trompeloeil::deathwatched<lifetime_tracker>>> {
+        co_return co_await std::move(child);
+    };
+    REQUIRE_THROWS_AS(ito::executor{}.run(parent2()), ito::exceptions::invalid_coro_handle_state);
+}
+
+
+TEST_CASE("nested co_await frees the child coroutine frame (no leak)")
+{
+    auto make_child = [](auto...) -> ito::coro<int> {
+        co_return 42;
+    };
+
+    auto parent = [&]() -> ito::coro<int> {
+        auto owner = std::make_unique<trompeloeil::deathwatched<lifetime_tracker>>();
+        auto mock  = owner.get();
+        auto child = make_child(std::move(owner));
+        int  res{};
+        {
+            REQUIRE_DESTRUCTION(*mock);
+            res = co_await std::move(child); // временный child, снаружи им никто не владеет
+        }
+        co_return res;
+    };
+
+    const auto res = ito::executor{}.run(parent());
+    REQUIRE(res == 42);
+}
+
+TEST_CASE("nested co_await frees the child coroutine frame (no leak) even if suspended")
+{
+    auto make_child = [](auto...) -> ito::coro<int> {
+        co_await std::suspend_always{};
+        co_return 42;
+    };
+
+    auto parent = [&]() -> ito::coro<int> {
+        auto owner = std::make_unique<trompeloeil::deathwatched<lifetime_tracker>>();
+        auto mock  = owner.get();
+        auto child = make_child(std::move(owner));
+        int  res{};
+        {
+            REQUIRE_DESTRUCTION(*mock);
+            res = co_await std::move(child); // временный child, снаружи им никто не владеет
+        }
+        co_return res;
+    };
+
+    REQUIRE_THROWS_AS(ito::executor{}.run(parent()), ito::exceptions::empty_value);
 }
