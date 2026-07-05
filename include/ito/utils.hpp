@@ -19,14 +19,17 @@ namespace ito::utils
     class finally
     {
     public:
-        finally(Fn&& fn)
+        explicit finally(Fn&& fn)
             : m_fn{std::move(fn)}
         {
         }
-        finally(const Fn& fn)
+        explicit finally(const Fn& fn)
             : m_fn{fn}
         {
         }
+
+        finally(const finally&) = delete;
+        finally(finally&&) noexcept = delete;
 
         ~finally() noexcept { std::move(m_fn)(); }
 

@@ -21,16 +21,16 @@ namespace ito
         {
             std::coroutine_handle<> continuation = std::noop_coroutine();
 
-            constexpr std::suspend_always initial_suspend() noexcept { return {}; }
+            constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
 
-            auto final_suspend() noexcept
+            auto final_suspend() const noexcept
             {
                 struct awaitable
                 {
                     std::coroutine_handle<> continuation{};
 
                     constexpr bool await_ready() const noexcept { return false; }
-                    auto           await_suspend(std::coroutine_handle<> h) noexcept { return continuation; }
+                    auto           await_suspend(std::coroutine_handle<>) const noexcept { return continuation; }
                     constexpr void await_resume() const noexcept { }
                 };
                 return awaitable{continuation};
@@ -93,13 +93,15 @@ namespace ito
             : m_h(std::exchange(std::move(other.m_h), {}))
         {
         }
+        coro& operator=(const coro&)     = delete;
+        coro& operator=(coro&&) noexcept = delete;
 
         friend class ito::executor;
 
         struct promise_type : public internal::promise_type<T>
         {
             coro get_return_object() { return coro{std::coroutine_handle<promise_type>::from_promise(*this)}; }
-        }; // namespace ito
+        };
 
         auto operator co_await() &&
         {
@@ -136,7 +138,7 @@ namespace ito
                 throw exceptions::invalid_coro_handle_state{"coroutine just completed"};
             }
             m_h.resume();
-            const auto _ = utils::finally{[&]() noexcept { std::exchange(m_h, {}).destroy(); }};
+            const auto _ = utils::finally{[this]() noexcept { std::exchange(m_h, {}).destroy(); }};
             return m_h.promise().get_result();
         }
 
