@@ -110,6 +110,7 @@ namespace ito
             {
                 throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to co_await coro"};
             }
+
             struct awaitable
             {
                 std::coroutine_handle<promise_type> _h{};
@@ -120,9 +121,13 @@ namespace ito
                     _h.promise().continuation = h;
                     return _h;
                 }
-                T await_resume() const { return _h.promise().get_result(); }
+                T await_resume() 
+                {
+                    const auto _ = utils::finally{[this]() noexcept { std::exchange(_h, {}).destroy(); }};
+                    return _h.promise().get_result();
+                }
             };
-            return awaitable{m_h};
+            return awaitable{std::exchange(m_h, {})};
         }
 
     private:
