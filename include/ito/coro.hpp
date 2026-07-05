@@ -115,6 +115,10 @@ namespace ito
             {
                 std::coroutine_handle<promise_type> _h{};
 
+                ~awaitable() noexcept {
+                    _h.destroy();
+                }
+
                 constexpr bool await_ready() const noexcept { return false; }
                 auto           await_suspend(std::coroutine_handle<> h) noexcept
                 {
@@ -123,7 +127,6 @@ namespace ito
                 }
                 T await_resume() 
                 {
-                    const auto _ = utils::finally{[this]() noexcept { std::exchange(_h, {}).destroy(); }};
                     return _h.promise().get_result();
                 }
             };
