@@ -88,11 +88,12 @@ namespace ito
             if (m_h) m_h.destroy();
         }
 
-        coro(const coro&) = default;
         coro(coro&& other) noexcept
-            : m_h(std::exchange(std::move(other.m_h), {}))
+            : m_h(std::exchange(other.m_h, {}))
         {
         }
+
+        coro(const coro&)                = delete;
         coro& operator=(const coro&)     = delete;
         coro& operator=(coro&&) noexcept = delete;
 
