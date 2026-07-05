@@ -105,6 +105,10 @@ namespace ito
 
         auto operator co_await() &&
         {
+            if (!m_h)
+            {
+                throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to co_await coro"};
+            }
             struct awaitable
             {
                 std::coroutine_handle<promise_type> _h{};
@@ -115,7 +119,7 @@ namespace ito
                     _h.promise().continuation = h;
                     return _h;
                 }
-                constexpr T await_resume() const noexcept { return _h.promise().get_result(); }
+                T await_resume() const { return _h.promise().get_result(); }
             };
             return awaitable{m_h};
         }
