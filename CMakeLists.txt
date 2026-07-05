@@ -111,7 +111,7 @@ if(ITO_BUILD_TESTS)
         coverage
         COMMAND llvm-profdata merge -o ${ITO_TEST_RESULTS_DIR}/results.profdata ${ITO_TEST_RESULTS_DIR}/*.profraw
         COMMAND llvm-cov report --ignore-filename-regex=${CMAKE_BINARY_DIR} ${ITO_COVERAGE_TARGETS}
-        COMMAND llvm-cov show --ignore-filename-regex=${CMAKE_BINARY_DIR} --show-branches=count -show-instantiations=false ${ITO_COVERAGE_TARGETS} > ${ITO_TEST_RESULTS_DIR}/coverage.txt
+        COMMAND llvm-cov export --ignore-filename-regex=${CMAKE_BINARY_DIR}  -format=lcov ${ITO_COVERAGE_TARGETS} > ${ITO_TEST_RESULTS_DIR}/coverage.lcov
         COMMENT "Generating coverage report"
     )
 
