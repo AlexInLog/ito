@@ -17,3 +17,17 @@ TEST_CASE("can't run loop inside loop")
         co_return;
     }());
 }
+
+TEST_CASE("can't run same loop inside loop")
+{
+    ito::loop loop{};
+    loop.run([&]() -> ito::coro<> {
+        REQUIRE_THROWS_AS(
+            loop.run([]() -> ito::coro<> {
+                co_return;
+            }()),
+            ito::exceptions::invalid_loop_state
+        );
+        co_return;
+    }());
+}
