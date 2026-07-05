@@ -254,8 +254,14 @@ TEST_CASE("nested co_await frees the child coroutine frame (no leak)")
 
     auto parent = [&]() -> ito::coro<int> {
         auto owner = std::make_unique<trompeloeil::deathwatched<lifetime_tracker>>();
-        REQUIRE_DESTRUCTION(*owner.get());
-        co_return co_await make_child(std::move(owner)); // временный child, снаружи им никто не владеет
+        auto mock  = owner.get();
+        auto child = make_child(std::move(owner));
+        int  res{};
+        {
+            REQUIRE_DESTRUCTION(*mock);
+            res = co_await std::move(child); // временный child, снаружи им никто не владеет
+        }
+        co_return res;
     };
 
     const auto res = ito::executor{}.run(parent());
