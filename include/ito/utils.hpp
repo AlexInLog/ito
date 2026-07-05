@@ -28,7 +28,7 @@ namespace ito::utils
         {
         }
 
-        finally(const finally&) = delete;
+        finally(const finally&)     = delete;
         finally(finally&&) noexcept = delete;
 
         ~finally() noexcept { std::move(m_fn)(); }
