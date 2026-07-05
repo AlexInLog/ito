@@ -2,7 +2,7 @@
 #include <catch2/trompeloeil.hpp>
 #include <ito/coro.hpp>
 #include <ito/exceptions.hpp>
-#include <ito/executor.hpp>
+#include <ito/loop.hpp>
 #include <trompeloeil/lifetime.hpp>
 #include <trompeloeil/mock.hpp>
 #include <trompeloeil/sequence.hpp>
@@ -83,13 +83,13 @@ TEST_CASE("Validate base coroutine checks")
             auto coro = make_coro();
             REQUIRE_CALL(*mock, call());
 
-            const auto res = ito::executor{}.run(std::move(coro));
+            const auto res = ito::loop{}.run(std::move(coro));
             REQUIRE(res == 42);
 
             SECTION("execute same coro twice")
             {
                 REQUIRE_THROWS_AS(
-                    ito::executor{}.run(std::move(coro)), // NOLINT (bugprone-use-after-move)
+                    ito::loop{}.run(std::move(coro)), // NOLINT (bugprone-use-after-move)
                     ito::exceptions::invalid_coro_handle_state
                 );
             }
@@ -103,12 +103,12 @@ TEST_CASE("Validate base coroutine checks")
             };
 
             REQUIRE_CALL(*mock, call());
-            const auto res = ito::executor{}.run(child_coro());
+            const auto res = ito::loop{}.run(child_coro());
             REQUIRE(res == 44);
 
             SECTION("execute same original coro twice via executing new child")
             {
-                REQUIRE_THROWS_AS(ito::executor{}.run(child_coro()), ito::exceptions::invalid_coro_handle_state);
+                REQUIRE_THROWS_AS(ito::loop{}.run(child_coro()), ito::exceptions::invalid_coro_handle_state);
             }
         }
         SECTION("run task from parent of another type")
@@ -119,7 +119,7 @@ TEST_CASE("Validate base coroutine checks")
             };
 
             REQUIRE_CALL(*mock, call());
-            const auto res = ito::executor{}.run(child_coro());
+            const auto res = ito::loop{}.run(child_coro());
             REQUIRE(res == "42");
         }
         SECTION("run task from parent of void")
@@ -132,7 +132,7 @@ TEST_CASE("Validate base coroutine checks")
             };
 
             REQUIRE_CALL(*mock, call());
-            ito::executor{}.run(child_coro());
+            ito::loop{}.run(child_coro());
             REQUIRE(child_res == 42);
         }
     }
@@ -148,7 +148,7 @@ TEST_CASE("return move_only value")
         };
 
         auto task = make_task();
-        auto r    = ito::executor{}.run(std::move(task));
+        auto r    = ito::loop{}.run(std::move(task));
         REQUIRE(mock == r.get());
         REQUIRE_DESTRUCTION(*mock);
         r.reset();
@@ -167,7 +167,7 @@ TEST_CASE("return-copy object")
     REQUIRE_CALL(t.impl(), copy_constructor()).TIMES(1).IN_SEQUENCE(s);
     REQUIRE_CALL(t.impl(), move_constructor()).TIMES(1).IN_SEQUENCE(s);
 
-    [[maybe_unused]] auto _ = ito::executor{}.run(make_task());
+    [[maybe_unused]] auto _ = ito::loop{}.run(make_task());
 }
 
 TEST_CASE("return-move object")
@@ -181,7 +181,7 @@ TEST_CASE("return-move object")
     trompeloeil::sequence s{};
     REQUIRE_CALL(t.impl(), move_constructor()).TIMES(2).IN_SEQUENCE(s);
 
-    [[maybe_unused]] auto _ = ito::executor{}.run(make_task());
+    [[maybe_unused]] auto _ = ito::loop{}.run(make_task());
 }
 
 TEST_CASE("propogate exception")
@@ -197,7 +197,7 @@ TEST_CASE("propogate exception")
 
     auto task = make_task();
 
-    REQUIRE_THROWS_AS(ito::executor{}.run(std::move(task)), custom_error);
+    REQUIRE_THROWS_AS(ito::loop{}.run(std::move(task)), custom_error);
 }
 
 TEST_CASE("coro co_await suspend_always")
@@ -208,7 +208,7 @@ TEST_CASE("coro co_await suspend_always")
     };
 
     auto task = make_task();
-    REQUIRE_THROWS_AS(ito::executor{}.run(std::move(task)), ito::exceptions::empty_value);
+    REQUIRE_THROWS_AS(ito::loop{}.run(std::move(task)), ito::exceptions::empty_value);
 }
 
 TEST_CASE("nested co_await releases child coro exactly once")
@@ -226,7 +226,7 @@ TEST_CASE("nested co_await releases child coro exactly once")
         co_return co_await std::move(child);
     };
 
-    auto result = ito::executor{}.run(parent());
+    auto result = ito::loop{}.run(parent());
     REQUIRE(mock == result.get());
 
     // Ресурс дошёл до нас живым: фрейм ребёнка не утащил его с собой при
@@ -242,7 +242,7 @@ TEST_CASE("nested co_await releases child coro exactly once")
     auto parent2 = [&]() -> ito::coro<std::unique_ptr<trompeloeil::deathwatched<lifetime_tracker>>> {
         co_return co_await std::move(child);
     };
-    REQUIRE_THROWS_AS(ito::executor{}.run(parent2()), ito::exceptions::invalid_coro_handle_state);
+    REQUIRE_THROWS_AS(ito::loop{}.run(parent2()), ito::exceptions::invalid_coro_handle_state);
 }
 
 
@@ -264,7 +264,7 @@ TEST_CASE("nested co_await frees the child coroutine frame (no leak)")
         co_return res;
     };
 
-    const auto res = ito::executor{}.run(parent());
+    const auto res = ito::loop{}.run(parent());
     REQUIRE(res == 42);
 }
 
@@ -287,5 +287,5 @@ TEST_CASE("nested co_await frees the child coroutine frame (no leak) even if sus
         co_return res;
     };
 
-    REQUIRE_THROWS_AS(ito::executor{}.run(parent()), ito::exceptions::empty_value);
+    REQUIRE_THROWS_AS(ito::loop{}.run(parent()), ito::exceptions::empty_value);
 }

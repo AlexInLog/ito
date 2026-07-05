@@ -6,10 +6,10 @@
 
 namespace ito
 {
-    class executor
+    class loop
     {
     public:
-        executor() = default;
+        loop() = default;
 
         template<typename T>
         T run(ito::coro<T>&& coro)

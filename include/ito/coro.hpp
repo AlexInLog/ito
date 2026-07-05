@@ -10,7 +10,7 @@
 
 namespace ito
 {
-    class executor;
+    class loop;
     namespace internal
     {
         struct void_t
@@ -97,7 +97,7 @@ namespace ito
         coro& operator=(const coro&)     = delete;
         coro& operator=(coro&&) noexcept = delete;
 
-        friend class ito::executor;
+        friend class ito::loop;
 
         struct promise_type : public internal::promise_type<T>
         {
