@@ -1,9 +1,8 @@
 #pragma once
 
-#include "ito/exceptions.hpp"
-#include "ito/utils.hpp"
-
 #include <ito/coro.hpp>
+#include <ito/exceptions.hpp>
+#include <ito/utils.hpp>
 
 #include <coroutine>
 #include <utility>
@@ -33,18 +32,6 @@ namespace ito
                 h.resume();
             }
 
-            // m_queue.push_back(h);
-
-            // while (!h.done()) {
-            //     if (m_queue.empty()) {
-            //         throw exceptions::invalid_loop_state{"queue inside loop is empty but handle is still not done"};
-            //     }
-            //
-            //     auto current = m_queue.front();
-            //     m_queue.pop_front();
-            //
-            //     current.resume();
-            // }
             const auto _ = utils::finally{[&h]() noexcept { h.destroy(); }};
             return h.promise().get_result();
         }
@@ -62,7 +49,5 @@ namespace ito
             static thread_local loop* s_loop{};
             return s_loop;
         }
-
-        // std::deque<std::coroutine_handle<>> m_queue{};
     };
 } // namespace ito
