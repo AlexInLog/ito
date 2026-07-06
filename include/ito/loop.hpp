@@ -20,7 +20,7 @@ namespace ito
             auto& current_loop_ptr = current_impl();
             if (current_loop_ptr)
             {
-                throw exceptions::invalid_loop_state{"loop::run() called from within an already-running loop on this thread"};
+                throw exceptions::invalid_loop_state{"loop::run_until_complete() called from within an already-running loop on this thread"};
             }
 
             current_loop_ptr                 = this;

@@ -138,7 +138,7 @@ namespace ito
         {
             if (!m_h)
             {
-                throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to run coro"};
+                throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to detach coro"};
             }
 
             return std::exchange(m_h, {});
