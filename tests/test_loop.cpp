@@ -7,9 +7,9 @@
 TEST_CASE("can't run loop inside loop")
 {
     ito::loop loop{};
-    loop.run([]() -> ito::coro<> {
+    loop.run_until_complete([]() -> ito::coro<> {
         REQUIRE_THROWS_AS(
-            ito::loop{}.run([]() -> ito::coro<> {
+            ito::loop{}.run_until_complete([]() -> ito::coro<> {
                 co_return;
             }()),
             ito::exceptions::invalid_loop_state
@@ -21,9 +21,9 @@ TEST_CASE("can't run loop inside loop")
 TEST_CASE("can't run same loop inside loop")
 {
     ito::loop loop{};
-    loop.run([&]() -> ito::coro<> {
+    loop.run_until_complete([&]() -> ito::coro<> {
         REQUIRE_THROWS_AS(
-            loop.run([]() -> ito::coro<> {
+            loop.run_until_complete([]() -> ito::coro<> {
                 co_return;
             }()),
             ito::exceptions::invalid_loop_state

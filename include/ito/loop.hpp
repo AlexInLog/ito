@@ -5,6 +5,8 @@
 
 #include <ito/coro.hpp>
 
+#include <coroutine>
+#include <deque>
 #include <utility>
 
 namespace ito
@@ -15,7 +17,7 @@ namespace ito
         loop() = default;
 
         template<typename T>
-        T run(ito::coro<T>&& coro)
+        T run_until_complete(ito::coro<T>&& coro)
         {
             auto& current_loop_ptr = current_impl();
             if (current_loop_ptr)
@@ -26,8 +28,24 @@ namespace ito
             current_loop_ptr                 = this;
             const auto free_current_loop_ptr = utils::finally{[]() noexcept { current_impl() = nullptr; }};
 
-            auto h = std::move(coro).detach();
-            h.resume();
+            std::coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
+            if (!h.done())
+            {
+                h.resume();
+            }
+
+            // m_queue.push_back(h);
+
+            // while (!h.done()) {
+            //     if (m_queue.empty()) {
+            //         throw exceptions::invalid_loop_state{"queue inside loop is empty but handle is still not done"};
+            //     }
+            //
+            //     auto current = m_queue.front();
+            //     m_queue.pop_front();
+            //
+            //     current.resume();
+            // }
             const auto _ = utils::finally{[&h]() noexcept { h.destroy(); }};
             return h.promise().get_result();
         }
@@ -45,5 +63,7 @@ namespace ito
             static thread_local loop* s_loop{};
             return s_loop;
         }
+
+        std::deque<std::coroutine_handle<>> m_queue{};
     };
 } // namespace ito
