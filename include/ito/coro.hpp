@@ -80,7 +80,7 @@ namespace ito
     } // namespace internal
 
     template<typename T = void>
-    class coro
+    class [[nodiscard("ito::coro object can't be discarded")]] coro
     {
     public:
         ~coro() noexcept

@@ -6,7 +6,6 @@
 #include <ito/coro.hpp>
 
 #include <coroutine>
-#include <deque>
 #include <utility>
 
 namespace ito
@@ -64,6 +63,6 @@ namespace ito
             return s_loop;
         }
 
-        std::deque<std::coroutine_handle<>> m_queue{};
+        // std::deque<std::coroutine_handle<>> m_queue{};
     };
 } // namespace ito
