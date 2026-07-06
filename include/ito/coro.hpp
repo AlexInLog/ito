@@ -10,7 +10,7 @@
 
 namespace ito
 {
-    class executor;
+    class loop;
     namespace internal
     {
         struct void_t
@@ -80,7 +80,7 @@ namespace ito
     } // namespace internal
 
     template<typename T = void>
-    class coro
+    class [[nodiscard("ito::coro object can't be discarded")]] coro
     {
     public:
         ~coro() noexcept
@@ -97,7 +97,7 @@ namespace ito
         coro& operator=(const coro&)     = delete;
         coro& operator=(coro&&) noexcept = delete;
 
-        friend class ito::executor;
+        friend class ito::loop;
 
         struct promise_type : public internal::promise_type<T>
         {
@@ -134,16 +134,14 @@ namespace ito
         {
         }
 
-        T run() &&
+        std::coroutine_handle<promise_type> detach() &&
         {
             if (!m_h)
             {
-                throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to run coro"};
+                throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to detach coro"};
             }
 
-            m_h.resume();
-            const auto _ = utils::finally{[this]() noexcept { std::exchange(m_h, {}).destroy(); }};
-            return m_h.promise().get_result();
+            return std::exchange(m_h, {});
         }
 
     private:

@@ -15,7 +15,7 @@ Most C++ coroutine libraries either expose raw, easy-to-misuse primitives, or hi
 What exists right now:
 
 - `ito::coro<T>` — a lazily-started, single-owner coroutine type (`initial_suspend` = always suspend). Supports `T = void` and move-only result types.
-- `ito::executor` — currently a synchronous, single-shot runner (`executor{}.run(coro)`). Not yet a scheduler.
+- `ito::loop` — currently a synchronous, single-shot runner (`loop{}.run_until_complete(coro)`). Not yet a scheduler.
 - Exception propagation from the coroutine body to the caller via `ito::exceptions::*`.
 - Chaining: a `coro<T>` can `co_await` another `coro<U>`.
 
@@ -25,7 +25,7 @@ What's *not* here yet (see [Roadmap](#roadmap)): multi-threading, work-stealing,
 
 ```cpp
 #include <ito/coro.hpp>
-#include <ito/executor.hpp>
+#include <ito/loop.hpp>
 
 ito::coro<int> compute()
 {
@@ -40,8 +40,8 @@ ito::coro<std::string> greet()
 
 int main()
 {
-    ito::executor executor;
-    std::string   result = executor.run(greet());
+    ito::loop loop;
+    std::string   result = loop.run_until_complete(greet());
     // result == "answer: 42"
 }
 ```
