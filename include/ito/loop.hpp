@@ -37,8 +37,9 @@ namespace ito
         template<typename T>
         T run_until_complete(ito::coro<T>&& coro)
         {
-            auto                                                       locked = lock();
-            std::coroutine_handle<typename ito::coro<T>::promise_type> h      = std::move(coro).detach();
+            [[maybe_unused]] const auto locked = lock();
+
+            std::coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
             h.resume();
 
             const auto _ = utils::finally{[&h]() noexcept { h.destroy(); }};
