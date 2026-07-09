@@ -157,8 +157,8 @@ if(ITO_BUILD_TESTS)
     set(ITO_COVERAGE_TARGETS -instr-profile=${ITO_TEST_RESULTS_DIR}/results.profdata -object $<TARGET_FILE:ito_tests>)
 
     macro(discover_tests TARGET)
-        include(Catch)
         target_link_libraries(${TARGET} PRIVATE ito_project_options)
+        include(Catch)
         catch_discover_tests(${TARGET} PROPERTIES  ENVIRONMENT "LLVM_PROFILE_FILE=${ITO_TEST_RESULTS_DIR}/${TARGET}-%p.profraw" )
     endmacro()
 
