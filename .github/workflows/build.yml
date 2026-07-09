@@ -115,11 +115,13 @@ jobs:
           compiler: ${{ matrix.config.compiler }}
           cmake: true
           ninja: true
-          conan: true
           ccache: true
           clang-tidy: ${{ matrix.config.lint }}
           cppcheck: ${{ matrix.config.lint }}
           vcpkg: false
+
+      - name: get conan
+        uses: turtlebrowser/get-conan@main
  
       - name: check conan cache
         uses: actions/cache@v5
