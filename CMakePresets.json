@@ -1,87 +1,120 @@
 {
-  "version": 6,
-  "configurePresets": [
-    {
-      "name": "base",
-      "hidden": true,
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/",
-      "cacheVariables": {
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-      }
-    },
-    {
-      "name": "release",
-      "displayName": "Release",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "debug",
-      "displayName": "Debug",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
-    },
-    {
-      "name": "debug-asan",
-      "displayName": "Debug + ASan + UBSan",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ITO_ENABLE_ASAN": "ON"
-      }
-    },
-    {
-      "name": "debug-tsan",
-      "displayName": "Debug + TSan",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ITO_ENABLE_TSAN": "ON"
-      }
-    },
-    {
-      "name": "lint",
-      "displayName": "Debug + clang-tidy",
-      "inherits": "debug",
-      "cacheVariables": {
-        "ITO_ENABLE_CLANG_TIDY": "ON"
-      }
-    },
-    {
-      "name": "coverage",
-      "displayName": "coverage",
-      "inherits": "release",
-      "cacheVariables": {
-        "CMAKE_CXX_FLAGS": "-O0 -g -fprofile-instr-generate -fcoverage-mapping"
-      }
-    }
-  ],
-  "buildPresets": [
-    { "name": "release",    "configurePreset": "release" },
-    { "name": "debug",      "configurePreset": "debug" },
-    { "name": "debug-asan", "configurePreset": "debug-asan" },
-    { "name": "debug-tsan", "configurePreset": "debug-tsan" },
-    { "name": "lint",       "configurePreset": "lint" },
-    { "name": "coverage",   "configurePreset": "coverage" }
-  ],
-  "testPresets": [
-    {
-      "name": "base",
-      "hidden": true,
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error" }
-    },
-    { "name": "release",    "inherits": "base", "configurePreset": "release" },
-    { "name": "debug",      "inherits": "base", "configurePreset": "debug" },
-    { "name": "lint",      "inherits": "base", "configurePreset": "lint" },
-    { "name": "debug-asan", "inherits": "base", "configurePreset": "debug-asan" },
-    { "name": "debug-tsan", "inherits": "base", "configurePreset": "debug-tsan" },
-    { "name": "coverage",    "inherits": "base", "configurePreset": "coverage", "environment": {
-      } }
-  ]
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_CXX_FLAGS": "-fno-rtti -Wall -Werror -Wextra -Wpedantic -Wcast-qual -Wformat=2 -Wundef -Werror=float-equal -Wno-gnu-zero-variadic-macro-arguments -Wno-error=maybe-uninitialized -Wno-error=uninitialized -Wno-unknown-warning-option -Wno-missing-template-arg-list-after-template-kw"
+            }
+        },
+
+
+        {
+            "name": "cppcheck",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_CXX_CPPCHECK": "cppcheck;--inline-suppr;--std=c++20;--enable=all;--suppressions-list=${sourceDir}/cppcheck.supp"
+            }
+        },
+        {
+            "name": "clang-tidy",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_CXX_CLANG_TIDY": "clang-tidy;-header-filter=${sourceDir}/src/.*;-checks=-*,bugprone-*,concurrency-*,performance-*,-macro*,-bugprone-exception-escape;-warnings-as-errors=*;-extra-arg=-std=c++20"
+            }
+        },
+
+
+        {
+            "name": "release",
+            "displayName": "Release",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "debug",
+            "displayName": "Debug",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "sanitize-tsan",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "-fsanitize=thread -g -O1"
+            }
+        },
+        {
+            "name": "sanitize-asan",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
+            }
+        },
+        {
+            "name": "sanitize-lsan",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "-fsanitize=leak -fno-omit-frame-pointer -g -O1"
+            }
+        },
+        {
+            "name": "sanitize-msan",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "-fsanitize=memory -fno-optimize-sibling-calls -fsanitize-memory-track-origins=2 -fno-omit-frame-pointer -g -O2"
+            }
+        },
+        {
+            "name": "sanitize-ubsan",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "-fsanitize=undefined"
+            }
+        },
+        {
+            "name": "lint",
+            "displayName": "Debug + clang-tidy",
+            "inherits": ["debug", "cppcheck", "clang-tidy"]
+        },
+        {
+            "name": "coverage",
+            "displayName": "coverage",
+            "inherits": "release",
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "-O0 -g -fprofile-instr-generate -fcoverage-mapping"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name" : "build",
+            "jobs" : 20,
+            "configurePreset" : "build"
+        }  
+    ],
+    "testPresets": [
+        {
+            "name": "tests",
+            "output": { "outputOnFailure": true },
+            "execution": { "noTestsAction": "error" }, "configurePreset": "base"
+        },
+        {
+            "name": "sanitize",
+            "inherits" : ["tests"],
+            "environment": {
+                "ASAN_OPTIONS": "strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1:detect_leaks=1",
+                "UBSAN_OPTIONS": "print_stacktrace=1",
+                "TSAN_OPTIONS": "second_deadlock_stack=1"
+            }
+        }
+    ]
 }
