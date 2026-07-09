@@ -69,6 +69,7 @@ jobs:
           buildPreset: build
           testPreset: sanitize
 
+  lint:
     strategy:
       matrix:
         config: [{name: ci-ubuntu-gcc,  os: ubuntu-latest, compiler: gcc},
