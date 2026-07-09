@@ -34,7 +34,7 @@ namespace ito::utils
         ~finally() noexcept { std::move(m_fn)(); }
 
     private:
-        [[no_unique_address]] Fn m_fn;
+        [[no_unique_address]] Fn m_fn; // NOLINT (clang-diagnostic-unknown-attributes)
     };
 
     template<typename T>
