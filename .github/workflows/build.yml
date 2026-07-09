@@ -113,7 +113,7 @@ jobs:
         with:
           compiler: ${{ matrix.config.compiler }}
           cmake: true
-          ninja: true
+          ninja: ${{ matrix.config.lint }}
           conan: true
           ccache: true
           clang-tidy: ${{ matrix.config.lint }}
