@@ -21,7 +21,7 @@ namespace ito
         {
             std::coroutine_handle<> continuation = std::noop_coroutine();
 
-            constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
+            static constexpr std::suspend_always initial_suspend() noexcept { return {}; }
 
             auto final_suspend() const noexcept
             {
@@ -29,9 +29,9 @@ namespace ito
                 {
                     std::coroutine_handle<> continuation{};
 
-                    constexpr bool await_ready() const noexcept { return false; }
-                    auto           await_suspend(std::coroutine_handle<>) const noexcept { return continuation; }
-                    constexpr void await_resume() const noexcept { }
+                    static constexpr bool await_ready() noexcept { return false; }
+                    auto                  await_suspend(std::coroutine_handle<>) const noexcept { return continuation; }
+                    static constexpr void await_resume() noexcept { }
                 };
                 return awaitable{continuation};
             }
@@ -117,8 +117,8 @@ namespace ito
 
                 ~awaitable() noexcept { _h.destroy(); }
 
-                constexpr bool await_ready() const noexcept { return false; }
-                auto           await_suspend(std::coroutine_handle<> h) noexcept
+                static constexpr bool await_ready() noexcept { return false; }
+                auto                  await_suspend(std::coroutine_handle<> h) noexcept
                 {
                     _h.promise().continuation = h;
                     return _h;
