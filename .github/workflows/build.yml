@@ -11,8 +11,14 @@ env:
 
 jobs:
   lint:
-    name: Lint
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        config: [{name: ci-ubuntu-gcc,  os: ubuntu-latest, compiler: gcc},
+                {name: ci-ubuntu-clang, os: ubuntu-latest, compiler: llvm},
+                {name: ci-windows,      os: windows-latest, compiler: msvc},
+                {name: ci-macos,        os: macos-latest, compiler: apple-clang}]
+    name: Lint - ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -21,7 +27,7 @@ jobs:
       - name: Setup Cpp
         uses: aminya/setup-cpp@v1
         with:
-          compiler: llvm
+          compiler: ${{ matrix.config.compiler }}
           cmake: true
           ninja: true
           conan: true
@@ -34,7 +40,7 @@ jobs:
         id: check_cache
         with:
             path: ${{ env.CONAN_HOME }}
-            key: deps-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+            key: deps-${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
 
       - name: Build cache
         uses: actions/cache@v5
@@ -52,9 +58,9 @@ jobs:
             ~/Library/Caches/ccache
             ${{ env.LOCALAPPDATA }}/ccache
             ${{ env.XDG_CACHE_HOME }}/ccache
-          key: ${{ runner.os }}-deps-lint-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+          key: ${{ runner.os }}-deps-lint-${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
           restore-keys: |
-            ${{ runner.os }}-deps-lint-
+            ${{ runner.os }}-deps-lint-${{ matrix.config.name }}-
 
       - name: conan detect profile
         run: |
@@ -91,7 +97,7 @@ jobs:
         id: check_cache
         with:
             path: ${{ env.CONAN_HOME }}
-            key: deps-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+            key: deps-coverage-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
 
       - name: Build cache
         uses: actions/cache@v5
