@@ -36,50 +36,104 @@ if(CCACHE)
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE})
 endif(CCACHE)
 
-
 # -- Options ---------------------------------
 option(ITO_BUILD_TESTS "Build tests" ON)
+option(ITO_ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(ITO_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+option(ITO_ENABLE_LSAN "Enable LeakSanitizer" OFF)
+option(ITO_ENABLE_MSAN "Enable MemorySanitizer" OFF)
+option(ITO_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(ITO_ENABLE_COVERAGE "Enable coverage instrumentation" OFF)
+
+add_library(ito_project_options INTERFACE)
+if(MSVC)
+
+    target_compile_options(ito_project_options INTERFACE
+        /W4
+        /WX
+    )
+
+else()
+
+    target_compile_options(ito_project_options INTERFACE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Werror
+
+        -Wcast-qual
+        -Wformat=2
+        -Wundef
+        -Werror=float-equal
+
+        -Wno-gnu-zero-variadic-macro-arguments
+        -Wno-error=maybe-uninitialized
+        -Wno-error=uninitialized
+        -Wno-unknown-warning-option
+        -Wno-missing-template-arg-list-after-template-kw
+
+        -fno-rtti
+    )
+
+endif()
+if(ITO_ENABLE_ASAN)
+
+    target_compile_options(ito_project_options INTERFACE
+        -fsanitize=address
+        -fno-omit-frame-pointer
+        -fno-optimize-sibling-calls
+        -fsanitize-address-use-after-scope
+        -g
+        -O1
+    )
+
+    target_link_options(ito_project_options INTERFACE
+        -fsanitize=address
+    )
+
+endif()
+if(ITO_ENABLE_TSAN)
+
+    target_compile_options(ito_project_options INTERFACE
+        -fsanitize=thread
+        -g
+        -O1
+    )
+
+    target_link_options(ito_project_options INTERFACE
+        -fsanitize=thread
+    )
+
+endif()
+if(ITO_ENABLE_UBSAN)
+
+    target_compile_options(ito_project_options INTERFACE
+        -fsanitize=undefined
+    )
+
+    target_link_options(ito_project_options INTERFACE
+        -fsanitize=undefined
+    )
+
+endif()
+if(ITO_ENABLE_COVERAGE)
+
+    target_compile_options(ito_project_options INTERFACE
+        -O0
+        -g
+        -fprofile-instr-generate
+        -fcoverage-mapping
+    )
+
+    target_link_options(ito_project_options INTERFACE
+        -fprofile-instr-generate
+        -fcoverage-mapping
+    )
+
+endif()
 
 if(ITO_BUILD_TESTS)
     set(CONAN_INSTALL_ARGS "${CONAN_INSTALL_ARGS};-o ito/*:with_tests=True")
-endif()
-
-# ── Dependencies ───────────────────────────────────────────────────────────────
-
-# ── Compiler warnings ──────────────────────────────────────────────────────────
-add_library(ito_warnings INTERFACE)
-target_compile_options(ito_warnings INTERFACE
-    $<$<CXX_COMPILER_ID:GNU,Clang>:
-        -Wall -Wextra -Wpedantic
-        -Wno-unused-parameter
-        -Wconversion
-        -Wshadow
-    >
-)
-
-# ── Sanitizer presets ──────────────────────────────────────────────────────────
-add_library(ito_sanitizers INTERFACE)
-if(ITO_ENABLE_ASAN)
-    message(STATUS "ASan enabled")
-    target_compile_options(ito_sanitizers INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(ito_sanitizers INTERFACE -fsanitize=address,undefined)
-endif()
-
-if(ITO_ENABLE_TSAN)
-    message(STATUS "TSan enabled")
-    target_compile_options(ito_sanitizers INTERFACE -fsanitize=thread -fno-omit-frame-pointer)
-    target_link_options(ito_sanitizers INTERFACE -fsanitize=thread)
-endif()
-
-# ── clang-tidy ─────────────────────────────────────────────────────────────────
-if(ITO_ENABLE_CLANG_TIDY)
-    find_program(CLANG_TIDY_EXE NAMES clang-tidy)
-    if(CLANG_TIDY_EXE)
-        message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
-        set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
-    else()
-        message(WARNING "clang-tidy not found")
-    endif()
 endif()
 
 # ── Library ────────────────────────────────────────────────────────────────────
@@ -88,7 +142,7 @@ target_include_directories(ito INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(ito INTERFACE ito_warnings ito_sanitizers)
+target_link_libraries(ito INTERFACE ito_project_options)
 
 # ── Tests ──────────────────────────────────────────────────────────────────────
 if(ITO_BUILD_TESTS)
@@ -99,10 +153,11 @@ if(ITO_BUILD_TESTS)
 
     set(ITO_TEST_RESULTS_DIR  ${CMAKE_BINARY_DIR}/test_results)
     file(MAKE_DIRECTORY ${ITO_TEST_RESULTS_DIR})
-    
+
     set(ITO_COVERAGE_TARGETS -instr-profile=${ITO_TEST_RESULTS_DIR}/results.profdata -object $<TARGET_FILE:ito_tests>)
 
     macro(discover_tests TARGET)
+        target_link_libraries(${TARGET} PRIVATE ito_project_options)
         include(Catch)
         catch_discover_tests(${TARGET} PROPERTIES  ENVIRONMENT "LLVM_PROFILE_FILE=${ITO_TEST_RESULTS_DIR}/${TARGET}-%p.profraw" )
     endmacro()
