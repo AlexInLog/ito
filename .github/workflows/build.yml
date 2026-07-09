@@ -109,11 +109,12 @@ jobs:
             ${{ runner.os }}-deps-lint-${{ matrix.config.name }}-
 
       - name: Setup Cpp
+        if: ${{ matrix.config.os != windows-latest }}
         uses: aminya/setup-cpp@v1
         with:
           compiler: ${{ matrix.config.compiler }}
           cmake: true
-          ninja: ${{ matrix.config.lint }}
+          ninja: true
           conan: true
           ccache: true
           clang-tidy: ${{ matrix.config.lint }}
