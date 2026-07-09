@@ -24,24 +24,6 @@ jobs:
         with:
           fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
 
-      - name: Setup Cpp
-        uses: aminya/setup-cpp@v1
-        with:
-          compiler: ${{ matrix.config.compiler }}
-          cmake: true
-          ninja: true
-          conan: true
-          ccache: true
-          clang-tidy: true
-          cppcheck: true
- 
-      - name: check conan cache
-        uses: actions/cache@v5
-        id: check_cache
-        with:
-            path: ${{ env.CONAN_HOME }}
-            key: deps-${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
-
       - name: Build cache
         uses: actions/cache@v5
         with:
@@ -61,6 +43,25 @@ jobs:
           key: ${{ runner.os }}-deps-lint-${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
           restore-keys: |
             ${{ runner.os }}-deps-lint-${{ matrix.config.name }}-
+
+      - name: Setup Cpp
+        uses: aminya/setup-cpp@v1
+        with:
+          compiler: ${{ matrix.config.compiler }}
+          cmake: true
+          ninja: true
+          conan: true
+          ccache: true
+          clang-tidy: true
+          cppcheck: true
+          vcpkg: false
+ 
+      - name: check conan cache
+        uses: actions/cache@v5
+        id: check_cache
+        with:
+            path: ${{ env.CONAN_HOME }}
+            key: deps-${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
 
       - name: conan detect profile
         run: |
@@ -83,22 +84,6 @@ jobs:
         with:
           fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
 
-      - name: Setup Cpp
-        uses: aminya/setup-cpp@v1
-        with:
-          compiler: llvm
-          cmake: true
-          ninja: true
-          conan: true
-          ccache: true
- 
-      - name: check conan cache
-        uses: actions/cache@v5
-        id: check_cache
-        with:
-            path: ${{ env.CONAN_HOME }}
-            key: deps-coverage-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
-
       - name: Build cache
         uses: actions/cache@v5
         with:
@@ -118,6 +103,22 @@ jobs:
           key: ${{ runner.os }}-deps-coverage-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
           restore-keys: |
             ${{ runner.os }}-deps-coverage-
+            
+      - name: Setup Cpp
+        uses: aminya/setup-cpp@v1
+        with:
+          compiler: llvm
+          cmake: true
+          ninja: true
+          conan: true
+          ccache: true
+ 
+      - name: check conan cache
+        uses: actions/cache@v5
+        id: check_cache
+        with:
+            path: ${{ env.CONAN_HOME }}
+            key: deps-coverage-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
 
       - name: conan detect profile
         run: |
