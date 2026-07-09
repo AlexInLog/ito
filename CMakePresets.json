@@ -47,35 +47,35 @@
         },
         {
             "name": "sanitize-tsan",
-            "inherits": "base",
+            "inherits": "release",
             "cacheVariables": {
                 "CMAKE_CXX_FLAGS": "-fsanitize=thread -g -O1"
             }
         },
         {
             "name": "sanitize-asan",
-            "inherits": "base",
+            "inherits": "release",
             "cacheVariables": {
                 "CMAKE_CXX_FLAGS": "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
             }
         },
         {
             "name": "sanitize-lsan",
-            "inherits": "base",
+            "inherits": "release",
             "cacheVariables": {
                 "CMAKE_CXX_FLAGS": "-fsanitize=leak -fno-omit-frame-pointer -g -O1"
             }
         },
         {
             "name": "sanitize-msan",
-            "inherits": "base",
+            "inherits": "release",
             "cacheVariables": {
                 "CMAKE_CXX_FLAGS": "-fsanitize=memory -fno-optimize-sibling-calls -fsanitize-memory-track-origins=2 -fno-omit-frame-pointer -g -O2"
             }
         },
         {
             "name": "sanitize-ubsan",
-            "inherits": "base",
+            "inherits": "release",
             "cacheVariables": {
                 "CMAKE_CXX_FLAGS": "-fsanitize=undefined"
             }
