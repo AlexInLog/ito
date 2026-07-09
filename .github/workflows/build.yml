@@ -13,75 +13,21 @@ concurrency:
 env:
   CONAN_HOME: "${{ github.workspace }}/release/"
 
-jobs:
-  sanitizers:
-    strategy:
-      matrix:
-        sanitizer: ["tsan", "asan", "lsan", "ubsan"]
-
-    name: Sanitizer - ${{ matrix.sanitizer }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
-
-      - name: Build cache
-        uses: actions/cache@v5
-        with:
-          path: |
-            ./build/
-            ~/vcpkg
-            ~/.cache/vcpkg/archives
-            ${{ env.LOCALAPPDATA }}/vcpkg/archives
-            ${{ env.APPDATA }}/vcpkg/archives
-            ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
-            ~/.cache/ccache
-            ~/.ccache
-            ~/.config/ccache
-            ~/Library/Caches/ccache
-            ${{ env.LOCALAPPDATA }}/ccache
-            ${{ env.XDG_CACHE_HOME }}/ccache
-          key: ${{ runner.os }}-deps-sanitizer-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
-          restore-keys: |
-            ${{ runner.os }}-deps-sanitizer-${{ matrix.config.name }}-
-
-      - name: Setup Cpp
-        uses: aminya/setup-cpp@v1
-        with:
-          compiler: llvm
-          cmake: true
-          ninja: true
-          conan: true
-          ccache: true
- 
-      - name: check conan cache
-        uses: actions/cache@v5
-        id: check_cache
-        with:
-            path: ${{ env.CONAN_HOME }}
-            key: deps-sanitizer-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
-
-      - name: conan detect profile
-        run: |
-          conan profile detect --force
- 
-      - name: Run CMake
-        uses: lukka/run-cmake@v10
-        with:
-          configurePreset: sanitize-${{ matrix.sanitizer }}
-          buildPreset: build
-          testPreset: sanitize
-
-  lint:
+jobs: 
+  tests:
     strategy:
       matrix:
         config:
-        - { name: ci-ubuntu-gcc,   os: ubuntu-latest,  compiler: gcc,          lint: true }
-        - { name: ci-ubuntu-clang, os: ubuntu-latest,  compiler: llvm,         lint: true }
-        - { name: ci-windows,      os: windows-latest, compiler: msvc,         lint: false }
-        - { name: ci-macos,        os: macos-latest,   compiler: apple-clang,  lint: true }
-    name: Lint - ${{ matrix.config.name }}
+        - { name: lint-ubuntu-gcc,   os: ubuntu-latest,  compiler: gcc,          lint: true,  configurePreset: lint, testPreset: tests }
+        - { name: lint-ubuntu-clang, os: ubuntu-latest,  compiler: llvm,         lint: true,  configurePreset: lint, testPreset: tests  }
+        - { name: lint-windows,      os: windows-latest, compiler: msvc,         lint: false, configurePreset: debug, testPreset: tests   }
+        - { name: lint-macos,        os: macos-latest,   compiler: apple-clang,  lint: true,  configurePreset: lint, testPreset: tests   }
+        - { name: sanitize-tsan, os: ubuntu-latest,  compiler: llvm,         lint: false,     configurePreset: sanitize-tsan, testPreset: sanitize   }
+        - { name: sanitize-asan, os: ubuntu-latest,  compiler: llvm,         lint: false,     configurePreset: sanitize-asan, testPreset: sanitize   }
+        - { name: sanitize-lsan, os: ubuntu-latest,  compiler: llvm,         lint: false,     configurePreset: sanitize-lsan, testPreset: sanitize   }
+        - { name: sanitize-ubsan, os: ubuntu-latest,  compiler: llvm,         lint: false,    configurePreset: sanitize-ubsan, testPreset: sanitize   }
+
+    name: ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
     steps:
       - uses: actions/checkout@v7
@@ -104,9 +50,9 @@ jobs:
             ~/Library/Caches/ccache
             ${{ env.LOCALAPPDATA }}/ccache
             ${{ env.XDG_CACHE_HOME }}/ccache
-          key: ${{ runner.os }}-deps-lint-${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+          key: ${{ runner.os }}-deps-${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
           restore-keys: |
-            ${{ runner.os }}-deps-lint-${{ matrix.config.name }}-
+            ${{ runner.os }}-deps-${{ matrix.config.name }}-
 
       - name: Setup Cpp
         if: ${{ matrix.config.os != windows-latest }}
@@ -118,7 +64,6 @@ jobs:
           ccache: true
           clang-tidy: ${{ matrix.config.lint }}
           cppcheck: ${{ matrix.config.lint }}
-          vcpkg: false
 
       - name: get conan
         uses: turtlebrowser/get-conan@main
@@ -128,7 +73,7 @@ jobs:
         id: check_cache
         with:
             path: ${{ env.CONAN_HOME }}
-            key: deps-lint-${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+            key: deps-${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
 
       - name: conan detect profile
         run: |
@@ -137,9 +82,9 @@ jobs:
       - name: Run CMake
         uses: lukka/run-cmake@v10
         with:
-          configurePreset: ${{ matrix.config.lint && 'lint' || 'debug' }}
+          configurePreset: ${{ matrix.config.configurePreset }}
           buildPreset: build
-          testPreset: tests
+          testPreset: ${{ matrix.config.testPreset }}
         env:
           VCPKG_ROOT: ''
 
