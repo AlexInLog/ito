@@ -3,14 +3,13 @@
     "configurePresets": [
         {
             "name": "base",
+            "hidden": true,
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/",
+            "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-                "CMAKE_CXX_FLAGS": "-fno-rtti -Wall -Werror -Wextra -Wpedantic -Wcast-qual -Wformat=2 -Wundef -Werror=float-equal -Wno-gnu-zero-variadic-macro-arguments -Wno-error=maybe-uninitialized -Wno-error=uninitialized -Wno-unknown-warning-option -Wno-missing-template-arg-list-after-template-kw"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
             }
         },
-
 
         {
             "name": "cppcheck",
@@ -19,6 +18,7 @@
                 "CMAKE_CXX_CPPCHECK": "cppcheck;--inline-suppr;--std=c++20;--enable=all;--suppressions-list=${sourceDir}/cppcheck.supp;--suppress=*:*/tests/*"
             }
         },
+
         {
             "name": "clang-tidy",
             "hidden": true,
@@ -27,6 +27,14 @@
             }
         },
 
+        {
+            "name": "debug",
+            "displayName": "Debug",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
 
         {
             "name": "release",
@@ -36,60 +44,68 @@
                 "CMAKE_BUILD_TYPE": "Release"
             }
         },
-        {
-            "name": "debug",
-            "displayName": "Debug",
-            "inherits": "base",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
-            }
-        },
-        {
-            "name": "sanitize-tsan",
-            "inherits": "release",
-            "cacheVariables": {
-                "CMAKE_CXX_FLAGS": "-fsanitize=thread -g -O1"
-            }
-        },
-        {
-            "name": "sanitize-asan",
-            "inherits": "release",
-            "cacheVariables": {
-                "CMAKE_CXX_FLAGS": "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
-            }
-        },
-        {
-            "name": "sanitize-lsan",
-            "inherits": "release",
-            "cacheVariables": {
-                "CMAKE_CXX_FLAGS": "-fsanitize=leak -fno-omit-frame-pointer -g -O1"
-            }
-        },
-        {
-            "name": "sanitize-msan",
-            "inherits": "release",
-            "cacheVariables": {
-                "CMAKE_CXX_FLAGS": "-fsanitize=memory -fno-optimize-sibling-calls -fsanitize-memory-track-origins=2 -fno-omit-frame-pointer -g -O2"
-            }
-        },
-        {
-            "name": "sanitize-ubsan",
-            "inherits": "release",
-            "cacheVariables": {
-                "CMAKE_CXX_FLAGS": "-fsanitize=undefined"
-            }
-        },
+
         {
             "name": "lint",
-            "displayName": "Debug + clang-tidy",
-            "inherits": ["debug", "cppcheck", "clang-tidy"]
+            "displayName": "Debug + clang-tidy + cppcheck",
+            "inherits": [
+                "debug",
+                "clang-tidy",
+                "cppcheck"
+            ]
         },
+
         {
             "name": "coverage",
-            "displayName": "coverage",
-            "inherits": "release",
+            "displayName": "Coverage",
+            "inherits": "debug",
             "cacheVariables": {
-                "CMAKE_CXX_FLAGS": "-O0 -g -fprofile-instr-generate -fcoverage-mapping"
+                "ITO_ENABLE_COVERAGE": "ON"
+            }
+        },
+
+        {
+            "name": "sanitize-asan",
+            "displayName": "ASan",
+            "inherits": "debug",
+            "cacheVariables": {
+                "ITO_ENABLE_ASAN": "ON"
+            }
+        },
+
+        {
+            "name": "sanitize-tsan",
+            "displayName": "TSan",
+            "inherits": "debug",
+            "cacheVariables": {
+                "ITO_ENABLE_TSAN": "ON"
+            }
+        },
+
+        {
+            "name": "sanitize-lsan",
+            "displayName": "LSan",
+            "inherits": "debug",
+            "cacheVariables": {
+                "ITO_ENABLE_LSAN": "ON"
+            }
+        },
+
+        {
+            "name": "sanitize-msan",
+            "displayName": "MSan",
+            "inherits": "debug",
+            "cacheVariables": {
+                "ITO_ENABLE_MSAN": "ON"
+            }
+        },
+
+        {
+            "name": "sanitize-ubsan",
+            "displayName": "UBSan",
+            "inherits": "debug",
+            "cacheVariables": {
+                "ITO_ENABLE_UBSAN": "ON"
             }
         }
     ],

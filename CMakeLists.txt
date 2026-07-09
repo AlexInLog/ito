@@ -38,6 +38,99 @@ endif(CCACHE)
 
 # -- Options ---------------------------------
 option(ITO_BUILD_TESTS "Build tests" ON)
+option(ITO_ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(ITO_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+option(ITO_ENABLE_LSAN "Enable LeakSanitizer" OFF)
+option(ITO_ENABLE_MSAN "Enable MemorySanitizer" OFF)
+option(ITO_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(ITO_ENABLE_COVERAGE "Enable coverage instrumentation" OFF)
+
+add_library(ito_project_options INTERFACE)
+if(MSVC)
+
+    target_compile_options(ito_project_options INTERFACE
+        /W4
+        /WX
+    )
+
+else()
+
+    target_compile_options(ito_project_options INTERFACE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Werror
+
+        -Wcast-qual
+        -Wformat=2
+        -Wundef
+        -Werror=float-equal
+
+        -Wno-gnu-zero-variadic-macro-arguments
+        -Wno-error=maybe-uninitialized
+        -Wno-error=uninitialized
+        -Wno-unknown-warning-option
+        -Wno-missing-template-arg-list-after-template-kw
+
+        -fno-rtti
+    )
+
+endif()
+if(ITO_ENABLE_ASAN)
+
+    target_compile_options(ito_project_options INTERFACE
+        -fsanitize=address
+        -fno-omit-frame-pointer
+        -fno-optimize-sibling-calls
+        -fsanitize-address-use-after-scope
+        -g
+        -O1
+    )
+
+    target_link_options(ito_project_options INTERFACE
+        -fsanitize=address
+    )
+
+endif()
+if(ITO_ENABLE_TSAN)
+
+    target_compile_options(ito_project_options INTERFACE
+        -fsanitize=thread
+        -g
+        -O1
+    )
+
+    target_link_options(ito_project_options INTERFACE
+        -fsanitize=thread
+    )
+
+endif()
+if(ITO_ENABLE_UBSAN)
+
+    target_compile_options(ito_project_options INTERFACE
+        -fsanitize=undefined
+    )
+
+    target_link_options(ito_project_options INTERFACE
+        -fsanitize=undefined
+    )
+
+endif()
+if(ITO_ENABLE_COVERAGE)
+
+    target_compile_options(ito_project_options INTERFACE
+        -O0
+        -g
+        -fprofile-instr-generate
+        -fcoverage-mapping
+    )
+
+    target_link_options(ito_project_options INTERFACE
+        -fprofile-instr-generate
+        -fcoverage-mapping
+    )
+
+endif()
 
 if(ITO_BUILD_TESTS)
     set(CONAN_INSTALL_ARGS "${CONAN_INSTALL_ARGS};-o ito/*:with_tests=True")
@@ -49,6 +142,7 @@ target_include_directories(ito INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+target_link_libraries(ito PRIVATE ito_project_options)
 
 # ── Tests ──────────────────────────────────────────────────────────────────────
 if(ITO_BUILD_TESTS)
@@ -64,6 +158,7 @@ if(ITO_BUILD_TESTS)
 
     macro(discover_tests TARGET)
         include(Catch)
+        target_link_libraries(${TARGET} PRIVATE ito_project_options)
         catch_discover_tests(${TARGET} PROPERTIES  ENVIRONMENT "LLVM_PROFILE_FILE=${ITO_TEST_RESULTS_DIR}/${TARGET}-%p.profraw" )
     endmacro()
 
