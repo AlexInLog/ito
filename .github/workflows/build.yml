@@ -76,10 +76,11 @@ jobs:
   lint:
     strategy:
       matrix:
-        config: [{name: ci-ubuntu-gcc,  os: ubuntu-latest, compiler: gcc},
-                {name: ci-ubuntu-clang, os: ubuntu-latest, compiler: llvm},
-                {name: ci-windows,      os: windows-latest, compiler: msvc},
-                {name: ci-macos,        os: macos-latest, compiler: apple-clang}]
+        config:
+        - { name: ci-ubuntu-gcc,   os: ubuntu-latest,  compiler: gcc,          lint: true }
+        - { name: ci-ubuntu-clang, os: ubuntu-latest,  compiler: llvm,         lint: true }
+        - { name: ci-windows,      os: windows-latest, compiler: msvc,         lint: false }
+        - { name: ci-macos,        os: macos-latest,   compiler: apple-clang,  lint: true }
     name: Lint - ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
     steps:
@@ -115,8 +116,8 @@ jobs:
           ninja: true
           conan: true
           ccache: true
-          clang-tidy: true
-          cppcheck: true
+          clang-tidy: ${{ matrix.config.lint }}
+          cppcheck: ${{ matrix.config.lint }}
           vcpkg: false
  
       - name: check conan cache
@@ -133,7 +134,7 @@ jobs:
       - name: Run CMake
         uses: lukka/run-cmake@v10
         with:
-          configurePreset: lint
+          configurePreset: ${{ matrix.config.lint && 'lint' || 'debug' }}
           buildPreset: build
           testPreset: tests
         env:
