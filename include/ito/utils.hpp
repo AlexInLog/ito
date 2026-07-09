@@ -34,7 +34,7 @@ namespace ito::utils
         ~finally() noexcept { std::move(m_fn)(); }
 
     private:
-        Fn m_fn;
+        [[no_unique_address]] Fn m_fn;
     };
 
     template<typename T>
