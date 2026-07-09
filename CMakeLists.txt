@@ -142,7 +142,7 @@ target_include_directories(ito INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(ito PRIVATE ito_project_options)
+target_link_libraries(ito INTERFACE ito_project_options)
 
 # ── Tests ──────────────────────────────────────────────────────────────────────
 if(ITO_BUILD_TESTS)
