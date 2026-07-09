@@ -50,9 +50,9 @@ jobs:
             ~/Library/Caches/ccache
             ${{ env.LOCALAPPDATA }}/ccache
             ${{ env.XDG_CACHE_HOME }}/ccache
-          key: ${{ runner.os }}-deps-${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+          key: ${{ runner.os }}-deps-tests--${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
           restore-keys: |
-            ${{ runner.os }}-deps-${{ matrix.config.name }}-
+            ${{ runner.os }}-deps-tests--${{ matrix.config.name }}-
 
       - name: Setup Cpp
         if: ${{ matrix.config.os != 'windows-latest' }}
@@ -76,7 +76,7 @@ jobs:
         id: check_cache
         with:
             path: ${{ env.CONAN_HOME }}
-            key: deps-${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+            key: deps-tests-${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
 
       - name: conan detect profile
         run: |
@@ -117,9 +117,9 @@ jobs:
             ~/Library/Caches/ccache
             ${{ env.LOCALAPPDATA }}/ccache
             ${{ env.XDG_CACHE_HOME }}/ccache
-          key: ${{ runner.os }}-deps-coverage-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+          key: ${{ runner.os }}-deps-coverage--${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
           restore-keys: |
-            ${{ runner.os }}-deps-coverage-
+            ${{ runner.os }}-deps-coverage--
             
       - name: Setup Cpp
         uses: aminya/setup-cpp@v1
@@ -135,7 +135,7 @@ jobs:
         id: check_cache
         with:
             path: ${{ env.CONAN_HOME }}
-            key: deps-coverage-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+            key: deps-coverage--${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
 
       - name: conan detect profile
         run: |
