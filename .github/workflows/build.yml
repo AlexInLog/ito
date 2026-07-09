@@ -18,14 +18,14 @@ jobs:
     strategy:
       matrix:
         config:
-        - { name: lint-ubuntu-gcc,   os: ubuntu-latest,  compiler: gcc,          lint: true,  configurePreset: lint, testPreset: tests }
-        - { name: lint-ubuntu-clang, os: ubuntu-latest,  compiler: llvm,         lint: true,  configurePreset: lint, testPreset: tests  }
-        - { name: lint-windows,      os: windows-latest, compiler: msvc,         lint: false, configurePreset: debug, testPreset: tests   }
-        - { name: lint-macos,        os: macos-latest,   compiler: apple-clang,  lint: true,  configurePreset: lint, testPreset: tests   }
-        - { name: sanitize-tsan, os: ubuntu-latest,  compiler: llvm,         lint: false,     configurePreset: sanitize-tsan, testPreset: sanitize   }
-        - { name: sanitize-asan, os: ubuntu-latest,  compiler: llvm,         lint: false,     configurePreset: sanitize-asan, testPreset: sanitize   }
-        - { name: sanitize-lsan, os: ubuntu-latest,  compiler: llvm,         lint: false,     configurePreset: sanitize-lsan, testPreset: sanitize   }
-        - { name: sanitize-ubsan, os: ubuntu-latest,  compiler: llvm,         lint: false,    configurePreset: sanitize-ubsan, testPreset: sanitize   }
+        - { name: lint-ubuntu-gcc,   os: ubuntu-latest,  compiler: gcc,          lint: true,  configurePreset: lint,            testPreset: tests }
+        - { name: lint-ubuntu-clang, os: ubuntu-latest,  compiler: llvm,         lint: true,  configurePreset: lint,            testPreset: tests  }
+        - { name: lint-windows,      os: windows-latest, compiler: msvc,         lint: false, configurePreset: debug,           testPreset: tests   }
+        - { name: lint-macos,        os: macos-latest,   compiler: apple-clang,  lint: true,  configurePreset: lint,            testPreset: tests   }
+        - { name: sanitize-tsan,     os: ubuntu-latest,  compiler: llvm,         lint: false, configurePreset: sanitize-tsan,   testPreset: sanitize   }
+        - { name: sanitize-asan,     os: ubuntu-latest,  compiler: llvm,         lint: false, configurePreset: sanitize-asan,   testPreset: sanitize   }
+        - { name: sanitize-lsan,     os: ubuntu-latest,  compiler: llvm,         lint: false, configurePreset: sanitize-lsan,   testPreset: sanitize   }
+        - { name: sanitize-ubsan,    os: ubuntu-latest,  compiler: llvm,         lint: false, configurePreset: sanitize-ubsan,  testPreset: sanitize   }
 
     name: ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
@@ -64,6 +64,9 @@ jobs:
           ccache: true
           clang-tidy: ${{ matrix.config.lint }}
           cppcheck: ${{ matrix.config.lint }}
+
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.8" }
 
       - name: get conan
         uses: turtlebrowser/get-conan@main
