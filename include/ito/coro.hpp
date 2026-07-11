@@ -1,7 +1,9 @@
 #pragma once
 
+#include "ito/details/utils/raii_coro_handle.hpp"
+#include <ito/details/utils/finally.hpp>
+#include <ito/details/utils/overloaded.hpp>
 #include <ito/exceptions.hpp>
-#include <ito/utils.hpp>
 
 #include <coroutine>
 #include <exception>
@@ -50,7 +52,7 @@ namespace ito
             T&& get_result_impl()
             {
                 return std::visit(
-                    utils::overloaded{
+                    details::utils::overloaded{
                         [](const std::monostate&) -> T&& { throw ito::exceptions::empty_value{"value of promise_type is not set"}; },
                         [](T&& v) -> T&& { return std::move(v); },
                         [](const std::exception_ptr& e) -> T&& { std::rethrow_exception(e); }
@@ -82,14 +84,9 @@ namespace ito
     template<typename T = void>
     class [[nodiscard("ito::coro object can't be discarded")]] coro
     {
-    public:
-        ~coro() noexcept
-        {
-            if (m_h) m_h.destroy();
-        }
-
+    public: 
         coro(coro&& other) noexcept
-            : m_h(std::exchange(other.m_h, {}))
+            : m_h(std::move(other.m_h))
         {
         }
 
@@ -125,7 +122,7 @@ namespace ito
                 }
                 T await_resume() { return _h.promise().get_result(); }
             };
-            return awaitable{std::exchange(m_h, {})};
+            return awaitable{std::move(m_h).detach()};
         }
 
     private:
@@ -141,10 +138,10 @@ namespace ito
                 throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to detach coro"};
             }
 
-            return std::exchange(m_h, {});
+            return std::move(m_h).detach();
         }
 
     private:
-        std::coroutine_handle<promise_type> m_h{};
+        details::utils::raii_coroutine_handle<promise_type> m_h{};
     };
 } // namespace ito

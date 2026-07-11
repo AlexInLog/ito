@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ito/coro.hpp>
+#include <ito/details/utils/finally.hpp>
 #include <ito/exceptions.hpp>
-#include <ito/utils.hpp>
 
 #include <coroutine>
 #include <utility>
@@ -22,7 +22,7 @@ namespace ito
             }
 
             current_loop_ptr = this;
-            return utils::finally{[]() noexcept { current_impl() = nullptr; }};
+            return details::utils::finally{[]() noexcept { current_impl() = nullptr; }};
         }
 
         static loop*& current_impl()
@@ -42,7 +42,7 @@ namespace ito
             std::coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
             h.resume();
 
-            const auto _ = utils::finally{[&h]() noexcept { h.destroy(); }};
+            const auto _ = details::utils::finally{[&h]() noexcept { h.destroy(); }};
             return h.promise().get_result();
         }
 

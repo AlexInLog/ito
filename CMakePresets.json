@@ -14,7 +14,7 @@
             "name": "cppcheck",
             "hidden": true,
             "cacheVariables": {
-                "CMAKE_CXX_CPPCHECK": "cppcheck;--inline-suppr;--std=c++20;--enable=all;--suppressions-list=${sourceDir}/cppcheck.supp;--suppress=*:*/tests/*"
+                "CMAKE_CXX_CPPCHECK": "cppcheck;--inline-suppr;--std=c++20;--enable=all;--suppressions-list=${sourceDir}/cppcheck.supp;--suppress=*:*/tests/*;--error-exitcode=1"
             }
         },
 

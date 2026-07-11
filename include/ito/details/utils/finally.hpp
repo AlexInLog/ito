@@ -1,19 +1,9 @@
 #pragma once
 
-#include <algorithm>
+#include <utility>
 #include <type_traits>
-namespace ito::utils
+namespace ito::details::utils
 {
-    template<class... Ts>
-    struct overloaded : Ts...
-    {
-        using Ts::operator()...;
-    };
-
-    template<class... Ts>
-    overloaded(Ts...) -> overloaded<Ts...>;
-
-
     template<typename Fn>
         requires (std::is_nothrow_invocable_v<Fn>)
     class finally
@@ -39,4 +29,4 @@ namespace ito::utils
 
     template<typename T>
     finally(const T&) -> finally<T>;
-} // namespace ito::utils
+} // namespace ito::details::utils
