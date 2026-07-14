@@ -14,6 +14,15 @@ namespace ito::details::utils
         }
 
     public:
+        raii_coroutine_handle_base(const raii_coroutine_handle_base&) = delete;
+        raii_coroutine_handle_base(raii_coroutine_handle_base&& other) noexcept
+            : m_h{std::exchange(other.m_h, {})}
+        {
+        }
+
+        raii_coroutine_handle_base& operator=(const raii_coroutine_handle_base&)     = delete;
+        raii_coroutine_handle_base& operator=(raii_coroutine_handle_base&&) noexcept = delete;
+
         ~raii_coroutine_handle_base() noexcept
         {
             if (m_h) m_h.destroy();
@@ -34,14 +43,8 @@ namespace ito::details::utils
         {
         }
 
-        explicit raii_coroutine_handle(raii_coroutine_handle<TPromise>&& other) noexcept
-            : raii_coroutine_handle_base{std::move(other).detach()}
-        {
-        }
-
-        raii_coroutine_handle(const raii_coroutine_handle<TPromise>&) = delete;
-
-        // std::coroutine_handle<TPromise> operator*() const { return std::coroutine_handle<TPromise>::from_address(m_h.address()); }
+        TPromise*                       operator->() const { return &(**this).promise(); }
+        std::coroutine_handle<TPromise> operator*() const { return std::coroutine_handle<TPromise>::from_address(m_h.address()); }
 
         std::coroutine_handle<TPromise> detach() &&
         {

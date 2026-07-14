@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ito/details/utils/raii_coro_handle.hpp"
+
 #include <ito/details/utils/finally.hpp>
 #include <ito/details/utils/overloaded.hpp>
 #include <ito/exceptions.hpp>
@@ -63,6 +64,7 @@ namespace ito
 
         public:
             void unhandled_exception() { m_value.template emplace<2>(std::current_exception()); }
+            bool is_ready() const { return m_value.index() > 0; }
         };
 
         template<typename T>
@@ -84,15 +86,11 @@ namespace ito
     template<typename T = void>
     class [[nodiscard("ito::coro object can't be discarded")]] coro
     {
-    public: 
+    public:
         coro(coro&& other) noexcept
             : m_h(std::move(other.m_h))
         {
         }
-
-        coro(const coro&)                = delete;
-        coro& operator=(const coro&)     = delete;
-        coro& operator=(coro&&) noexcept = delete;
 
         friend class ito::loop;
 
@@ -110,19 +108,17 @@ namespace ito
 
             struct awaitable
             {
-                std::coroutine_handle<promise_type> _h{};
+                details::utils::raii_coroutine_handle<promise_type> _h;
 
-                ~awaitable() noexcept { _h.destroy(); }
-
-                static constexpr bool await_ready() noexcept { return false; }
-                auto                  await_suspend(std::coroutine_handle<> h) noexcept
+                constexpr bool await_ready() noexcept { return _h->is_ready(); }
+                auto           await_suspend(std::coroutine_handle<> h) noexcept
                 {
-                    _h.promise().continuation = h;
-                    return _h;
+                    _h->continuation = h;
+                    return *_h;
                 }
-                T await_resume() { return _h.promise().get_result(); }
+                T await_resume() { return _h->get_result(); }
             };
-            return awaitable{std::move(m_h).detach()};
+            return awaitable{std::move(m_h)};
         }
 
     private:
