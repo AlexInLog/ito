@@ -1,7 +1,8 @@
 #pragma once
 
-#include <utility>
 #include <type_traits>
+#include <utility>
+
 namespace ito::details::utils
 {
     template<typename Fn>
@@ -9,6 +10,9 @@ namespace ito::details::utils
     class finally
     {
     public:
+        finally& operator=(const finally&) = delete;
+        finally& operator=(finally&&)      = delete;
+
         explicit finally(Fn&& fn)
             : m_fn{std::move(fn)}
         {

@@ -26,14 +26,14 @@ namespace ito
 
             static constexpr std::suspend_always initial_suspend() noexcept { return {}; }
 
-            auto final_suspend() const noexcept
+            [[nodiscard]] auto final_suspend() const noexcept
             {
                 struct awaitable
                 {
                     std::coroutine_handle<> continuation{};
 
                     static constexpr bool await_ready() noexcept { return false; }
-                    auto                  await_suspend(std::coroutine_handle<>) const noexcept { return continuation; }
+                    [[nodiscard]] auto    await_suspend(std::coroutine_handle<>) const noexcept { return continuation; }
                     static constexpr void await_resume() noexcept { }
                 };
                 return awaitable{continuation};
@@ -63,8 +63,8 @@ namespace ito
             };
 
         public:
-            void unhandled_exception() { m_value.template emplace<2>(std::current_exception()); }
-            bool is_ready() const { return m_value.index() > 0; }
+            void               unhandled_exception() { m_value.template emplace<2>(std::current_exception()); }
+            [[nodiscard]] bool is_ready() const { return m_value.index() > 0; }
         };
 
         template<typename T>
@@ -87,11 +87,6 @@ namespace ito
     class [[nodiscard("ito::coro object can't be discarded")]] coro
     {
     public:
-        coro(coro&& other) noexcept
-            : m_h(std::move(other.m_h))
-        {
-        }
-
         friend class ito::loop;
 
         struct promise_type : public internal::promise_type<T>
