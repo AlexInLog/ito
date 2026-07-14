@@ -28,7 +28,7 @@ namespace ito::details::utils
             if (m_h) m_h.destroy();
         }
 
-        operator bool() const { return !!m_h; }
+        explicit operator bool() const { return !!m_h; }
 
     protected:
         [[nodiscard]] std::coroutine_handle<> get() const & { return m_h; }
