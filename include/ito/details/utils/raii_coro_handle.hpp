@@ -31,8 +31,8 @@ namespace ito::details::utils
         explicit operator bool() const { return !!m_h; }
 
     protected:
-        [[nodiscard]] std::coroutine_handle<> get() const & { return m_h; }
-        [[nodiscard]] std::coroutine_handle<> get() && { return std::exchange(m_h, {}); }
+        [[nodiscard]] std::coroutine_handle<> get_impl() const & { return m_h; }
+        [[nodiscard]] std::coroutine_handle<> get_impl() && { return std::exchange(m_h, {}); }
 
     private:
         std::coroutine_handle<> m_h{};
@@ -47,12 +47,16 @@ namespace ito::details::utils
         {
         }
 
-        TPromise*                       operator->() const { return &(**this).promise(); }
-        std::coroutine_handle<TPromise> operator*() const { return std::coroutine_handle<TPromise>::from_address(get().address()); }
+        TPromise* operator->() const { return &get().promise(); }
 
-        std::coroutine_handle<TPromise> detach() &&
+        [[nodiscard]] std::coroutine_handle<TPromise> get() const
         {
-            return std::coroutine_handle<TPromise>::from_address(std::move(*this).get().address());
+            return std::coroutine_handle<TPromise>::from_address(get_impl().address());
+        }
+
+        [[nodiscard]] std::coroutine_handle<TPromise> detach() &&
+        {
+            return std::coroutine_handle<TPromise>::from_address(std::move(*this).get_impl().address());
         }
     };
 } // namespace ito::details::utils
