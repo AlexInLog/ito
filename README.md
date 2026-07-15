@@ -2,8 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=AlexInLog_ito&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=AlexInLog_ito) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=AlexInLog_ito&metric=coverage)](https://sonarcloud.io/summary/new_code?id=AlexInLog_ito)
 
-A C++20/23 async runtime, aiming for an `asyncio`-style API with a work-stealing scheduler and an `io_uring`-based reactor.
+A C++20 async runtime, aiming for an `asyncio`-style API with a work-stealing scheduler and an `io_uring`-based reactor.
 
+> [!IMPORTANT]
 > **Status: early stage.** The public API is unstable and internals described in the roadmap below are not implemented yet. See [Current state](#current-state) for what actually exists today.
 
 ## Why
@@ -69,7 +70,7 @@ Useful CMake options:
 |---------------------|---------|----------------------------------|
 | `ITO_BUILD_TESTS`   | `ON`    | Build the test suite            |
 
-Requires a C++23-capable compiler (GCC 13+ / Clang 17+).
+Requires a C++20-capable compiler.
 
 ## Testing
 
