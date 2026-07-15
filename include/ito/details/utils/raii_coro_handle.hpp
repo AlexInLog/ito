@@ -32,7 +32,6 @@ namespace ito::details::utils
 
     protected:
         [[nodiscard]] std::coroutine_handle<> get_impl() const & { return m_h; }
-        [[nodiscard]] std::coroutine_handle<> get_impl() && { return std::exchange(m_h, {}); }
 
     private:
         std::coroutine_handle<> m_h{};
@@ -53,10 +52,5 @@ namespace ito::details::utils
         {
             return std::coroutine_handle<TPromise>::from_address(get_impl().address());
         }
-
-        // [[nodiscard]] std::coroutine_handle<TPromise> detach() &&
-        // {
-        //     return std::coroutine_handle<TPromise>::from_address(std::move(*this).get_impl().address());
-        // }
     };
 } // namespace ito::details::utils
