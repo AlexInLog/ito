@@ -2,7 +2,6 @@
 
 #include "ito/details/utils/raii_coro_handle.hpp"
 
-#include <ito/details/utils/finally.hpp>
 #include <ito/details/utils/overloaded.hpp>
 #include <ito/exceptions.hpp>
 
@@ -109,7 +108,7 @@ namespace ito
                 auto           await_suspend(std::coroutine_handle<> h) noexcept
                 {
                     _h->continuation = h;
-                    return *_h;
+                    return _h.get();
                 }
                 T await_resume() { return _h->get_result(); }
             };
@@ -122,14 +121,14 @@ namespace ito
         {
         }
 
-        std::coroutine_handle<promise_type> detach() &&
+        details::utils::raii_coroutine_handle<promise_type> detach() &&
         {
             if (!m_h)
             {
                 throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to detach coro"};
             }
 
-            return std::move(m_h).detach();
+            return std::move(m_h);
         }
 
     private:

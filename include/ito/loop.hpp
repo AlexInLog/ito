@@ -4,7 +4,6 @@
 #include <ito/details/utils/finally.hpp>
 #include <ito/exceptions.hpp>
 
-#include <coroutine>
 #include <utility>
 
 namespace ito
@@ -39,11 +38,10 @@ namespace ito
         {
             [[maybe_unused]] const auto locked = lock();
 
-            std::coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
-            h.resume();
+            details::utils::raii_coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
+            h.get().resume();
 
-            const auto _ = details::utils::finally{[&h]() noexcept { h.destroy(); }};
-            return h.promise().get_result();
+            return h->get_result();
         }
 
         // static loop& current()

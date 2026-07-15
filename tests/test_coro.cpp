@@ -15,7 +15,7 @@
 struct lifetime_tracker // NOLINT (cppcoreguidelines-special-member-functions)
 {
     virtual ~lifetime_tracker() = default;
-    lifetime_tracker() = default;
+    lifetime_tracker()          = default;
 
     MAKE_MOCK(call, auto()->void);
 };
@@ -29,7 +29,7 @@ struct copy_count_tracker_impl
 class copy_count_tracker
 {
 public:
-    copy_count_tracker() = default;
+    copy_count_tracker()  = default;
     ~copy_count_tracker() = default;
 
     copy_count_tracker(const copy_count_tracker& v)
