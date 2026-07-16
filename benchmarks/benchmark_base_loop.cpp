@@ -12,4 +12,13 @@ TEST_CASE("no-op loop checks")
             co_return;
         }());
     }; // BENCHMARK("call no-op coro")
+    BENCHMARK("call no-op coro as child")
+    {
+        return ito::loop{}.run_until_complete([]() -> ito::coro<> {
+            co_await []() -> ito::coro<> {
+                co_return;
+            }();
+            co_return;
+        }());
+    }; // BENCHMARK("call no-op coro as child")
 }
