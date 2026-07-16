@@ -224,15 +224,10 @@ jobs:
           tool: 'catch2'
           output-file-path: ./benchmark_results.txt
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
+          auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main'}}
           # Show alert with commit comment on detecting possible performance regression
           alert-threshold: '200%'
           comment-on-alert: true
           summary-always: true
           comment-always: true
           fail-on-alert: true
-
-      - name: Push benchmark result
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: git push 'https://AlexInLog:${{ secrets.GITHUB_TOKEN }}@github.com/AlexInLog/ito.git' gh-pages:gh-pages
-
