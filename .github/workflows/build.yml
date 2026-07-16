@@ -158,3 +158,81 @@ jobs:
         with:
           args: > 
             --define sonar.cfamily.compile-commands=build/compile_commands.json
+
+  benchmark:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+
+      - name: Build cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ./build/
+            ~/vcpkg
+            ~/.cache/vcpkg/archives
+            ${{ env.LOCALAPPDATA }}/vcpkg/archives
+            ${{ env.APPDATA }}/vcpkg/archives
+            ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
+            ~/.cache/ccache
+            ~/.ccache
+            ~/.config/ccache
+            ~/Library/Caches/ccache
+            ${{ env.LOCALAPPDATA }}/ccache
+            ${{ env.XDG_CACHE_HOME }}/ccache
+          key: ${{ runner.os }}-deps-benchmark--${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-benchmark--
+            
+      - name: Setup Cpp
+        uses: aminya/setup-cpp@v1
+        with:
+          compiler: llvm
+          cmake: true
+          ninja: true
+          conan: true
+          ccache: true
+ 
+      - name: check conan cache
+        uses: actions/cache@v5
+        id: check_cache
+        with:
+            path: ${{ env.CONAN_HOME }}
+            key: deps-benchmark--${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+
+      - name: conan detect profile
+        run: |
+          conan profile detect --force
+ 
+      - name: Run CMake
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: release
+          buildPreset: build
+
+      - name: Run Benchmarks
+        run: |
+          ./build/bin/ito_benchmarks | tee benchmark_results.txt
+ 
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Ito benchmarks - Ubuntu - clang
+          tool: 'catch2'
+          output-file-path: ./benchmark_results.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          # Show alert with commit comment on detecting possible performance regression
+          alert-threshold: '200%'
+          comment-on-alert: true
+          summary-always: true
+          comment-always: true
+          fail-on-alert: true
+
+      - name: Push benchmark result
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: git push 'https://AlexInLog:${{ secrets.GITHUB_TOKEN }}@github.com/AlexInLog/ito.git' gh-pages:gh-pages
+
