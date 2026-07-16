@@ -229,6 +229,7 @@ jobs:
           alert-threshold: '200%'
           comment-on-alert: true
           summary-always: true
+          comment-always: true
           fail-on-alert: true
 
       - name: Push benchmark result
