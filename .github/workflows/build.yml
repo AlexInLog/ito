@@ -268,10 +268,13 @@ jobs:
       # contents permission to update benchmark contents in gh-pages branch
       contents: write
     steps:
+<<<<<<< HEAD
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
+=======
+>>>>>>> 0d114b2 (Update build.yml)
       - uses: actions/download-artifact@v4
         with:
           name: benchmark-results
