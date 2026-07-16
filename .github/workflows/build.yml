@@ -159,7 +159,7 @@ jobs:
           args: > 
             --define sonar.cfamily.compile-commands=build/compile_commands.json
 
-  coverage:
+  benchmark:
     name: Benchmarks
     runs-on: ubuntu-latest
     steps:
