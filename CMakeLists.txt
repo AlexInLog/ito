@@ -38,6 +38,8 @@ endif(CCACHE)
 
 # -- Options ---------------------------------
 option(ITO_BUILD_TESTS "Build tests" ON)
+option(ITO_BUILD_BENCHMARKS "Build benchmarks" ON)
+
 option(ITO_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(ITO_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(ITO_ENABLE_LSAN "Enable LeakSanitizer" OFF)
@@ -135,6 +137,10 @@ endif()
 if(ITO_BUILD_TESTS)
     set(CONAN_INSTALL_ARGS "${CONAN_INSTALL_ARGS};-o ito/*:with_tests=True")
 endif()
+if(ITO_BUILD_BENCHMARKS)
+    set(CONAN_INSTALL_ARGS "${CONAN_INSTALL_ARGS};-o ito/*:with_benchmarks=True")
+endif()
+
 
 # ── Library ────────────────────────────────────────────────────────────────────
 add_library(ito INTERFACE)
@@ -145,32 +151,37 @@ target_include_directories(ito INTERFACE
 target_link_libraries(ito INTERFACE ito_project_options)
 
 # ── Tests ──────────────────────────────────────────────────────────────────────
-if(ITO_BUILD_TESTS)
+if(ITO_BUILD_TESTS OR ITO_BUILD_BENCHMARKS)
     find_package(Catch2 REQUIRED)
-    find_package(trompeloeil REQUIRED)
+    if (ITO_BUILD_TESTS)
+        find_package(trompeloeil REQUIRED)
 
-    enable_testing()
+        enable_testing()
 
-    set(ITO_TEST_RESULTS_DIR  ${CMAKE_BINARY_DIR}/test_results)
-    file(MAKE_DIRECTORY ${ITO_TEST_RESULTS_DIR})
+        set(ITO_TEST_RESULTS_DIR  ${CMAKE_BINARY_DIR}/test_results)
+        file(MAKE_DIRECTORY ${ITO_TEST_RESULTS_DIR})
 
-    set(ITO_COVERAGE_TARGETS -instr-profile=${ITO_TEST_RESULTS_DIR}/results.profdata -object $<TARGET_FILE:ito_tests>)
+        set(ITO_COVERAGE_TARGETS -instr-profile=${ITO_TEST_RESULTS_DIR}/results.profdata -object $<TARGET_FILE:ito_tests>)
 
-    macro(discover_tests TARGET)
-        target_link_libraries(${TARGET} PRIVATE ito_project_options)
-        include(Catch)
-        catch_discover_tests(${TARGET} PROPERTIES  ENVIRONMENT "LLVM_PROFILE_FILE=${ITO_TEST_RESULTS_DIR}/${TARGET}-%p.profraw" )
-    endmacro()
+        macro(discover_tests TARGET)
+            target_link_libraries(${TARGET} PRIVATE ito_project_options)
+            include(Catch)
+            catch_discover_tests(${TARGET} PROPERTIES  ENVIRONMENT "LLVM_PROFILE_FILE=${ITO_TEST_RESULTS_DIR}/${TARGET}-%p.profraw" )
+        endmacro()
 
-    add_custom_target(
-        coverage
-        COMMAND llvm-profdata merge -o ${ITO_TEST_RESULTS_DIR}/results.profdata ${ITO_TEST_RESULTS_DIR}/*.profraw
-        COMMAND llvm-cov report --ignore-filename-regex=${CMAKE_BINARY_DIR} ${ITO_COVERAGE_TARGETS}
-        COMMAND llvm-cov show --ignore-filename-regex=${CMAKE_BINARY_DIR} --show-branches=count -show-instantiations=false ${ITO_COVERAGE_TARGETS} > ${ITO_TEST_RESULTS_DIR}/coverage.txt
-        COMMENT "Generating coverage report"
-    )
+        add_custom_target(
+            coverage
+            COMMAND llvm-profdata merge -o ${ITO_TEST_RESULTS_DIR}/results.profdata ${ITO_TEST_RESULTS_DIR}/*.profraw
+            COMMAND llvm-cov report --ignore-filename-regex=${CMAKE_BINARY_DIR} ${ITO_COVERAGE_TARGETS}
+            COMMAND llvm-cov show --ignore-filename-regex=${CMAKE_BINARY_DIR} --show-branches=count -show-instantiations=false ${ITO_COVERAGE_TARGETS} > ${ITO_TEST_RESULTS_DIR}/coverage.txt
+            COMMENT "Generating coverage report"
+        )
 
-    add_subdirectory(tests)
+        add_subdirectory(tests)
+    endif()
+    if (ITO_BUILD_BENCHMARKS) 
+        add_subdirectory(benchmarks)
+    endif()
 endif()
 
 # ── Examples ───────────────────────────────────────────────────────────────────
