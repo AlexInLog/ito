@@ -215,7 +215,7 @@ jobs:
 
       - name: Run Benchmarks
         run: |
-          ./build/ito_benchmarks | tee benchmark_results.txt
+          ./build/bin/ito_benchmarks | tee benchmark_results.txt
  
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
