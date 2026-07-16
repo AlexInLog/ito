@@ -220,9 +220,9 @@ jobs:
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          name: Catch2 Benchmark (v3)
+          name: Ito benchmarks - Ubuntu - clang
           tool: 'catch2'
-          output-file-path: examples/catch2/benchmark_result.txt
+          output-file-path: ./benchmark_result.txt
           auto-push: false
           # Show alert with commit comment on detecting possible performance regression
           alert-threshold: '200%'
