@@ -4,6 +4,8 @@
 #include <ito/details/utils/finally.hpp>
 #include <ito/exceptions.hpp>
 
+#include <deque>
+#include <functional>
 #include <utility>
 
 namespace ito
@@ -39,10 +41,18 @@ namespace ito
             [[maybe_unused]] const auto locked = lock();
 
             details::utils::raii_coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
-            h.get().resume();
+            m_queue.push_back([&]() { h.get().resume(); });
+
+            while (!h.get().done() && !m_queue.empty())
+            {
+                m_queue.front()();
+                m_queue.pop_front();
+            }
 
             return h->get_result();
         }
+
+        void call_soon(std::function<void()> callback) { m_queue.push_back(std::move(callback)); }
 
         // static loop& current()
         // {
@@ -52,5 +62,6 @@ namespace ito
         // static loop* try_current() noexcept { return current_impl(); }
 
     private:
+        std::deque<std::function<void()>> m_queue{};
     };
 } // namespace ito
