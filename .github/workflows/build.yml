@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read   # safe default for tests/coverage jobs and PR runs
+
 env:
   CONAN_HOME: "${{ github.workspace }}/release/"
 
@@ -158,3 +161,131 @@ jobs:
         with:
           args: > 
             --define sonar.cfamily.compile-commands=build/compile_commands.json
+
+  benchmark-run:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    # no permissions override needed -> inherits contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Build cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ./build/
+            ~/vcpkg
+            ~/.cache/vcpkg/archives
+            ${{ env.LOCALAPPDATA }}/vcpkg/archives
+            ${{ env.APPDATA }}/vcpkg/archives
+            ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
+            ~/.cache/ccache
+            ~/.ccache
+            ~/.config/ccache
+            ~/Library/Caches/ccache
+            ${{ env.LOCALAPPDATA }}/ccache
+            ${{ env.XDG_CACHE_HOME }}/ccache
+          key: ${{ runner.os }}-deps-benchmark--${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-benchmark--
+
+      - name: Setup Cpp
+        uses: aminya/setup-cpp@v1
+        with:
+          compiler: llvm
+          cmake: true
+          ninja: true
+          conan: true
+          ccache: true
+
+      - name: check conan cache
+        uses: actions/cache@v5
+        id: check_cache
+        with:
+          path: ${{ env.CONAN_HOME }}
+          key: deps-benchmark--${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+
+      - name: conan detect profile
+        run: |
+          conan profile detect --force
+
+      - name: Run CMake
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: release
+          buildPreset: build
+
+      - name: Run Benchmarks
+        run: |
+          ./build/bin/ito_benchmarks | tee benchmark_results.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark_results.txt
+
+  benchmark-report:
+    name: Benchmark Report (PR)
+    needs: benchmark-run
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # only what's needed to post a PR comment
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Ito benchmarks - Ubuntu - clang
+          tool: 'catch2'
+          output-file-path: ./benchmark_results.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          alert-threshold: '200%'
+          comment-on-alert: true
+          summary-always: true
+          comment-always: true
+          fail-on-alert: true
+
+  benchmark-publish:
+    name: Publish Benchmarks (main)
+    needs: benchmark-run
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      # deployments permission to deploy GitHub pages website
+      deployments: write
+      # contents permission to update benchmark contents in gh-pages branch
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Ito benchmarks - Ubuntu - clang
+          tool: 'catch2'
+          output-file-path: ./benchmark_results.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: '200%'
+          comment-on-alert: true
+          summary-always: true
+          comment-always: true   
+          fail-on-alert: true
