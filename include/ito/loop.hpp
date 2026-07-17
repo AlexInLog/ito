@@ -44,7 +44,7 @@ namespace ito
 
             details::utils::raii_coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
             if (!m_queue.empty())
-                m_queue.emplace_back([h]() { h.get().resume(); });
+                m_queue.emplace_back([&h]() { h.get().resume(); });
             else
                 h.get().resume();
 
