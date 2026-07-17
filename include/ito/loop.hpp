@@ -44,20 +44,21 @@ namespace ito
 
             details::utils::raii_coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
             if (!m_queue.empty())
-                m_queue.emplace_back([&]() { h.get().resume(); });
+                m_queue.emplace_back([h]() { h.get().resume(); });
             else
                 h.get().resume();
 
             while (!h.get().done() && !m_queue.empty())
             {
                 const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
-                m_queue.front()();
+                std::move(m_queue.front())();
             }
 
             return h->get_result();
         }
 
-        template<std::invocable Fn>
+        template<typename Fn>
+            requires std::invocable<std::decay_t<Fn>&&>
         void call_soon(Fn&& callback)
         {
             m_queue.emplace_back(std::forward<Fn>(callback));
