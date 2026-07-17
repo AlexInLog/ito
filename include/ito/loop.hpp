@@ -4,6 +4,10 @@
 #include <ito/details/utils/finally.hpp>
 #include <ito/exceptions.hpp>
 
+#include <concepts>
+#include <coroutine>
+#include <deque>
+#include <functional>
 #include <utility>
 
 namespace ito
@@ -39,9 +43,17 @@ namespace ito
             [[maybe_unused]] const auto locked = lock();
 
             details::utils::raii_coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
-            h.get().resume();
+
+            run_until_complete_impl(h.get());
 
             return h->get_result();
+        }
+
+        template<typename Fn>
+            requires std::invocable<std::decay_t<Fn>&&>
+        void call_soon(Fn&& callback)
+        {
+            m_queue.emplace_back(std::forward<Fn>(callback));
         }
 
         // static loop& current()
@@ -52,5 +64,21 @@ namespace ito
         // static loop* try_current() noexcept { return current_impl(); }
 
     private:
+        void run_until_complete_impl(std::coroutine_handle<> h)
+        {
+            if (!m_queue.empty())
+                m_queue.emplace_back([&h]() { h.resume(); });
+            else
+                h.resume();
+
+            while (!h.done() && !m_queue.empty())
+            {
+                const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
+                std::move(m_queue.front())();
+            }
+        }
+
+    private:
+        std::deque<std::function<void()>> m_queue{};
     };
 } // namespace ito
