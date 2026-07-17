@@ -41,7 +41,7 @@ namespace ito
             [[maybe_unused]] const auto locked = lock();
 
             details::utils::raii_coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
-            m_queue.push_back([&]() { h.get().resume(); });
+            m_queue.push_back([&h]() { h.get().resume(); });
 
             while (!h.get().done() && !m_queue.empty())
             {
