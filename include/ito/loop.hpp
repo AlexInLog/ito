@@ -43,16 +43,8 @@ namespace ito
             [[maybe_unused]] const auto locked = lock();
 
             details::utils::raii_coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
-            if (!m_queue.empty())
-                m_queue.emplace_back([&h]() { h.get().resume(); });
-            else
-                h.get().resume();
 
-            while (!h.get().done() && !m_queue.empty())
-            {
-                const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
-                std::move(m_queue.front())();
-            }
+            run_until_complete_impl(h.get());
 
             return h->get_result();
         }
@@ -70,6 +62,21 @@ namespace ito
         //     throw exceptions::invalid_loop_state{"no loop is currently running on this thread"};
         // }
         // static loop* try_current() noexcept { return current_impl(); }
+
+    private:
+        void run_until_complete_impl(std::coroutine_handle<> h)
+        {
+            if (!m_queue.empty())
+                m_queue.emplace_back([&h]() { h.resume(); });
+            else
+                h.resume();
+
+            while (!h.done() && !m_queue.empty())
+            {
+                const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
+                std::move(m_queue.front())();
+            }
+        }
 
     private:
         std::deque<std::function<void()>> m_queue{};
