@@ -1,11 +1,18 @@
-#include "ito/coro.hpp"
-#include "ito/loop.hpp"
-
 #include <catch2/benchmark/catch_benchmark.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <ito/coro.hpp>
+#include <ito/loop.hpp>
+
+#include <numeric>
 
 TEST_CASE("no-op loop checks")
 {
+    BENCHMARK("creation of coro")
+    {
+        return []() -> ito::coro<> {
+            co_return;
+        }();
+    }; // BENCHMARK("creation of coro")
     BENCHMARK("call no-op coro")
     {
         return ito::loop{}.run_until_complete([]() -> ito::coro<> {
@@ -21,4 +28,17 @@ TEST_CASE("no-op loop checks")
             co_return;
         }());
     }; // BENCHMARK("call no-op coro as child")
+    BENCHMARK_ADVANCED("call coro calling function")(Catch::Benchmark::Chronometer meter)
+    {
+        std::vector<int> vec(meter.runs(), 0);
+        std::iota(vec.begin(), vec.end(), meter.runs());
+        meter.measure([&](int i) {
+            auto lambda = [&vec, i]() {
+                return vec[i];
+            };
+            return ito::loop{}.run_until_complete([lambda]() -> ito::coro<int> {
+                co_return lambda();
+            }());
+        });
+    }; // BENCHMARK("call coro calling function")
 }
