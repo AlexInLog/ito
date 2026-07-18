@@ -10,6 +10,14 @@
 #include <functional>
 #include <utility>
 
+namespace ito::exceptions
+{
+    struct invalid_loop_state final : public ito_exception
+    {
+        using ito_exception::ito_exception;
+    };
+} // namespace ito::exceptions
+
 namespace ito
 {
     class loop

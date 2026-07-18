@@ -82,7 +82,7 @@ TEST_CASE("future basics")
     {
         const auto res = loop.run_until_complete([&]() -> ito::coro<int> {
             ito::async::future<int> res{};
-            int                          value = 10;
+            int                     value = 10;
 
             loop.call_soon([&]() { mock.call(0); });
             loop.call_soon([&]() {
@@ -110,5 +110,13 @@ TEST_CASE("future basics")
         f.set_result(10);
         REQUIRE_THROWS_AS(f.set_result(20), ito::exceptions::value_is_set);
         REQUIRE_THROWS_AS(f.set_exception({}), ito::exceptions::value_is_set);
+    }
+    SECTION("future of void")
+    {
+        loop.run_until_complete([&]() -> ito::coro<> {
+            ito::async::future<> res{};
+            res.set_result();
+            co_await res;
+        }());
     }
 }
