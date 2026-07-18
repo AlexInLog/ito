@@ -51,11 +51,11 @@ namespace ito::async
             {
                 if (std::exchange(m_co_awaited, true)) throw ito::exceptions::future_just_awaited{"future is just was awaited before"};
 
-                struct awaitable // NOLINT
+                struct awaitable 
                 {
                     future_base<T>* self{};
 
-                    awaitable(future_base<T>* s)
+                    explicit awaitable(future_base<T>* s)
                         : self(s)
                     {
                     }
