@@ -60,20 +60,26 @@ namespace ito::details::utils
     };
 
     template<typename T>
-    class error_or_optional : public error_or_optional_base<T>
+    class error_or_optional : private error_or_optional_base<T>
     {
     public:
         void set_result(const T& v) { this->set_result_impl(v); }
         void set_result(T&& v) { this->set_result_impl(std::move(v)); }
         T&&  get_result() { return this->get_result_impl(); }
+
+        using error_or_optional_base<T>::is_ready;
+        using error_or_optional_base<T>::set_exception;
     };
 
     template<>
-    class error_or_optional<void> : public error_or_optional_base<void_t>
+    class error_or_optional<void> : private error_or_optional_base<void_t>
     {
     public:
         void set_result() { this->set_result_impl(void_t{}); }
         void get_result() { this->get_result_impl(); }
+
+        using error_or_optional_base<void_t>::is_ready;
+        using error_or_optional_base<void_t>::set_exception;
     };
 
 

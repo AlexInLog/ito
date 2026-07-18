@@ -38,13 +38,15 @@ namespace ito::details::utils
     };
 
     template<typename TPromise>
-    class raii_coroutine_handle final : public raii_coroutine_handle_base
+    class raii_coroutine_handle final : private raii_coroutine_handle_base
     {
     public:
         explicit raii_coroutine_handle(std::coroutine_handle<>&& h)
             : raii_coroutine_handle_base(std::move(h))
         {
         }
+
+        using raii_coroutine_handle_base::operator bool;
 
         TPromise* operator->() const { return &get().promise(); }
 
