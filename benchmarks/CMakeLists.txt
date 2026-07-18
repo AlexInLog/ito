@@ -10,3 +10,9 @@ target_link_libraries(ito_benchmarks
         ito
         Catch2::Catch2WithMain
 )
+
+set_target_properties(ito_benchmarks PROPERTIES 
+    C_CLANG_TIDY "" 
+    CXX_CLANG_TIDY ""
+)
+

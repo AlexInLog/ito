@@ -9,6 +9,11 @@ namespace ito::exceptions
         using std::runtime_error::runtime_error;
     };
 
+    struct value_is_set final : public ito_exception
+    {
+        using ito_exception::ito_exception;
+    };
+
     struct empty_value final : public ito_exception
     {
         using ito_exception::ito_exception;
