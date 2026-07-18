@@ -23,11 +23,4 @@ namespace ito::exceptions
     {
         using ito_exception::ito_exception;
     };
-
-    struct invalid_loop_state final : public ito_exception
-    {
-        using ito_exception::ito_exception;
-    };
-
-
 } // namespace ito::exceptions

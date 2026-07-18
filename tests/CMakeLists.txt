@@ -3,6 +3,9 @@ find_package(Catch2 REQUIRED)
 add_executable(ito_tests
     test_coro.cpp
     test_loop.cpp
+    test_future.cpp
+
+    common.hpp
 )
 
 target_link_libraries(ito_tests

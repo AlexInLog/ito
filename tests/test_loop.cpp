@@ -1,3 +1,5 @@
+#include "common.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/trompeloeil.hpp>
 #include <ito/coro.hpp>
@@ -8,10 +10,19 @@
 
 #include <coroutine>
 
-class call_mock
+
+TEST_CASE("loop bounds self to current")
 {
-    MAKE_MOCK(call, auto(size_t)->void);
-};
+    ito::loop loop{};
+    REQUIRE_THROWS_AS(ito::loop::current(), ito::exceptions::invalid_loop_state);
+
+    loop.run_until_complete([&]() -> ito::coro<> {
+        REQUIRE(&loop == &ito::loop::current());
+        co_return;
+    }());
+
+    REQUIRE_THROWS_AS(ito::loop::current(), ito::exceptions::invalid_loop_state);
+}
 
 TEST_CASE("can't run loop inside loop")
 {

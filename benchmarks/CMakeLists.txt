@@ -1,7 +1,7 @@
 find_package(Catch2 REQUIRED)
 
 add_executable(ito_benchmarks
-    benchmark_base_loop.cpp
+    simple_benchmarks.cpp
     benchmark_baseline.cpp
 )
 

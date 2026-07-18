@@ -1,18 +1,19 @@
 ---
-Checks: >
-  clang-diagnostic-*,
-  clang-analyzer-*,
-  bugprone-*,
-  -bugprone-exception-escape,
-  concurrency-*,
-  performance-*,
-  -macro*,
-  readability-identifier-naming,
-  cppcoreguidelines-*,
-  -cppcoreguidelines-avoid-capturing-lambda-coroutines,
-  -cppcoreguidelines-avoid-magic-numbers,
-  modernize-*,
-  -modernize-use-trailing-return-type
+Checks:
+    - 'clang-diagnostic-*'
+    - 'clang-analyzer-*'
+    - 'bugprone-*'
+    - '-bugprone-exception-escape'
+    - 'concurrency-*'
+    - 'performance-*'
+    - '-macro*'
+    - 'readability-identifier-naming'
+    - 'cppcoreguidelines-*'
+    - '-cppcoreguidelines-avoid-capturing-lambda-coroutines'
+    - '-cppcoreguidelines-avoid-magic-numbers'
+    - 'modernize-*'
+    - '-modernize-use-trailing-return-type'
+    - 'google-explicit-constructor'
 WarningsAsErrors: '*'
 ExtraArgs:
     - '-std=c++20' 
