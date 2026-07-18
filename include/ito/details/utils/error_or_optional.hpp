@@ -22,7 +22,7 @@ namespace ito::details::utils
             m_value.template emplace<2>(err);
         }
 
-        [[nodiscard]] bool is_ready() const { return m_value.index() > 0; }
+        [[nodiscard]] bool is_ready() const { return !m_value.valueless_by_exception() && m_value.index() != 0; }
 
     protected:
         void set_result_impl(T&& v)
