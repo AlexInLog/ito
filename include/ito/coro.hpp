@@ -1,14 +1,12 @@
 #pragma once
 
-#include "ito/details/utils/raii_coro_handle.hpp"
-
-#include <ito/details/utils/overloaded.hpp>
+#include <ito/details/utils/error_or_optional.hpp>
+#include <ito/details/utils/raii_coroutine_handle.hpp>
 #include <ito/exceptions.hpp>
 
 #include <coroutine>
 #include <exception>
 #include <utility>
-#include <variant>
 
 namespace ito
 {
@@ -40,45 +38,27 @@ namespace ito
         };
 
         template<typename T>
-        struct typed_promise_type : public internal::base_promise_type
+        struct typed_promise_type
+            : public internal::base_promise_type
+            , protected ito::details::utils::error_or_optional<T>
         {
-        private:
-            std::variant<std::monostate, T, std::exception_ptr> m_value{};
+            void unhandled_exception() { this->set_exception(std::current_exception()); }
 
-        protected:
-            void set_value(T&& v) { m_value.template emplace<1>(std::move(v)); }
-            void set_value(const T& v) { m_value.template emplace<1>(v); }
-
-            T&& get_result_impl()
-            {
-                return std::visit(
-                    details::utils::overloaded{
-                        [](const std::monostate&) -> T&& { throw ito::exceptions::empty_value{"value of promise_type is not set"}; },
-                        [](T&& v) -> T&& { return std::move(v); },
-                        [](const std::exception_ptr& e) -> T&& { std::rethrow_exception(e); }
-                    },
-                    std::move(m_value)
-                );
-            };
-
-        public:
-            void               unhandled_exception() { m_value.template emplace<2>(std::current_exception()); }
-            [[nodiscard]] bool is_ready() const { return m_value.index() > 0; }
+            using ito::details::utils::error_or_optional<T>::get_result;
+            using ito::details::utils::error_or_optional<T>::is_ready;
         };
 
         template<typename T>
         struct promise_type : public typed_promise_type<T>
         {
-            void return_value(T&& v) { typed_promise_type<T>::set_value(std::move(v)); }
-            void return_value(const T& v) { typed_promise_type<T>::set_value(v); }
-            T&&  get_result() { return this->get_result_impl(); }
+            void return_value(T&& v) { this->set_result(std::move(v)); }
+            void return_value(const T& v) { this->set_result(v); }
         };
 
         template<>
-        struct promise_type<void> : public typed_promise_type<void_t>
+        struct promise_type<void> : public typed_promise_type<void>
         {
-            void return_void() { typed_promise_type<void_t>::set_value(void_t{}); }
-            void get_result() { this->get_result_impl(); }
+            void return_void() { this->set_result(); }
         };
     } // namespace internal
 
