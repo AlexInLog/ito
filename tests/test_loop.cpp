@@ -10,6 +10,20 @@
 
 #include <coroutine>
 
+
+TEST_CASE("loop bounds self to current")
+{
+    ito::loop loop{};
+    REQUIRE_THROWS_AS(ito::loop::current(), ito::exceptions::invalid_loop_state);
+
+    loop.run_until_complete([&]() -> ito::coro<> {
+        REQUIRE(&loop == &ito::loop::current());
+        co_return;
+    }());
+
+    REQUIRE_THROWS_AS(ito::loop::current(), ito::exceptions::invalid_loop_state);
+}
+
 TEST_CASE("can't run loop inside loop")
 {
     ito::loop loop{};
