@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784323156992,
+  "lastUpdate": 1784380712342,
   "repoUrl": "https://github.com/AlexInLog/ito",
   "entries": {
     "Ito benchmarks - Ubuntu - clang": [
@@ -180,6 +180,86 @@ window.BENCHMARK_DATA = {
             "range": "± 1.14583",
             "unit": "ns",
             "extra": "100 samples\n1441 iterations"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "32845901+AlexInLog@users.noreply.github.com",
+            "name": "Aleksey Loginov",
+            "username": "AlexInLog"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cd2169f7a1aefe0a545547f8d00233f9fcb013ea",
+          "message": "refactor value handler (#18)\n\n* refactor value\n\n* hide as private\n\n* fix is_ready\n\n* rename",
+          "timestamp": "2026-07-18T16:17:18+03:00",
+          "tree_id": "bf46512fec5294c0defab3da30cd3366a0435efb",
+          "url": "https://github.com/AlexInLog/ito/commit/cd2169f7a1aefe0a545547f8d00233f9fcb013ea"
+        },
+        "date": 1784380712103,
+        "tool": "catch2",
+        "benches": [
+          {
+            "name": "unuqie_ptr",
+            "value": 14.202,
+            "range": "± 0.895991",
+            "unit": "ns",
+            "extra": "100 samples\n2108 iterations"
+          },
+          {
+            "name": "small std::function",
+            "value": 2.17888,
+            "range": "± 0.11108",
+            "unit": "ns",
+            "extra": "100 samples\n13310 iterations"
+          },
+          {
+            "name": "big std::function",
+            "value": 20.0845,
+            "range": "± 2.34973",
+            "unit": "ns",
+            "extra": "100 samples\n1550 iterations"
+          },
+          {
+            "name": "creation of coro",
+            "value": 15.482,
+            "range": "± 2.25096",
+            "unit": "ns",
+            "extra": "100 samples\n2068 iterations"
+          },
+          {
+            "name": "call no-op coro",
+            "value": 23.4155,
+            "range": "± 3.17847",
+            "unit": "ns",
+            "extra": "100 samples\n1330 iterations"
+          },
+          {
+            "name": "call_soon before no-op coro",
+            "value": 36.2625,
+            "range": "± 3.31527",
+            "unit": "ns",
+            "extra": "100 samples\n857 iterations"
+          },
+          {
+            "name": "call no-op coro as child",
+            "value": 41.3552,
+            "range": "± 4.38689",
+            "unit": "ns",
+            "extra": "100 samples\n741 iterations"
+          },
+          {
+            "name": "call coro calling function",
+            "value": 24.4719,
+            "range": "± 3.03908",
+            "unit": "ns",
+            "extra": "100 samples\n1303 iterations"
           }
         ]
       }
