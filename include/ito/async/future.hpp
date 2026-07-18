@@ -49,11 +49,23 @@ namespace ito::async
 
             auto operator co_await() &
             {
-                if (this->m_continuation) throw ito::exceptions::future_just_awaited{"future is just was awaited before"};
+                if (std::exchange(m_co_awaited, true)) throw ito::exceptions::future_just_awaited{"future is just was awaited before"};
 
-                struct awaitable
+                struct awaitable // NOLINT
                 {
                     future_base<T>* self{};
+
+                    awaitable(future_base<T>* s)
+                        : self(s)
+                    {
+                    }
+                    ~awaitable() noexcept { self->m_continuation = {}; }
+
+                    awaitable(const awaitable&)            = delete;
+                    awaitable& operator=(const awaitable&) = delete;
+
+                    awaitable(awaitable&& o) noexcept = delete;
+                    awaitable& operator=(awaitable&&) = delete;
 
                     constexpr bool await_ready() noexcept { return self->m_value.is_ready(); }
                     auto           await_suspend(std::coroutine_handle<> h) noexcept { self->m_continuation = h; }
@@ -73,6 +85,7 @@ namespace ito::async
         private:
             ito::details::utils::error_or_optional<T> m_value{};
             std::coroutine_handle<>                   m_continuation{};
+            bool                                      m_co_awaited{};
         };
 
     } // namespace details

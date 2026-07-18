@@ -37,7 +37,23 @@ TEST_CASE("future basics")
 
         SECTION("and then resolve future")
         {
-            REQUIRE_THROWS_AS(res.set_result(10), ito::exceptions::invalid_loop_state);
+            res.set_result(10);
+            loop.run_until_complete([&]() -> ito::coro<void> {
+                REQUIRE_THROWS_AS(co_await res, ito::exceptions::future_just_awaited);
+                co_return;
+            }());
+        }
+
+        SECTION("and then run one more coro and resolve future and suspend")
+        {
+            loop.run_until_complete([&]() -> ito::coro<> {
+                // it shouldn't cause SEGFAULT if we are trying to resume currently dead coro
+                res.set_result(20);
+
+                ito::async::future<int> inner_res{};
+                loop.call_soon([&]() { inner_res.set_result(10); });
+                co_await inner_res;
+            }());
         }
     }
 
