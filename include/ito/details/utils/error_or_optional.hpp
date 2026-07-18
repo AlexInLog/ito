@@ -18,7 +18,7 @@ namespace ito::details::utils
     public:
         void set_exception(const std::exception_ptr& err)
         {
-            check_empty();
+            ensure_not_set();
             m_value.template emplace<2>(err);
         }
 
@@ -27,12 +27,13 @@ namespace ito::details::utils
     protected:
         void set_result_impl(T&& v)
         {
-            check_empty();
+            ensure_not_set();
             m_value.template emplace<1>(std::move(v));
         }
+
         void set_result_impl(const T& v)
         {
-            check_empty();
+            ensure_not_set();
             m_value.template emplace<1>(v);
         }
 
@@ -49,7 +50,7 @@ namespace ito::details::utils
         };
 
     private:
-        void check_empty()
+        void ensure_not_set()
         {
             if (is_ready()) [[unlikely]]
                 throw ito::exceptions::value_is_set{"value is just set"};
