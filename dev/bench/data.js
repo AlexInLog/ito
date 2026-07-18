@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784380712342,
+  "lastUpdate": 1784389168725,
   "repoUrl": "https://github.com/AlexInLog/ito",
   "entries": {
     "Ito benchmarks - Ubuntu - clang": [
@@ -260,6 +260,100 @@ window.BENCHMARK_DATA = {
             "range": "± 3.03908",
             "unit": "ns",
             "extra": "100 samples\n1303 iterations"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "32845901+AlexInLog@users.noreply.github.com",
+            "name": "Aleksey Loginov",
+            "username": "AlexInLog"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b5101b3e8201a791f0f7c7fc1003ec2f548c4f3c",
+          "message": "async futures (#19)\n\n* add async futures\n\n* readme\n\n* readme\n\n* fix inheritance\n\n* fix UB\n\n* lint\n\n* betteer checks",
+          "timestamp": "2026-07-18T18:38:09+03:00",
+          "tree_id": "09d539d74f56df97a8149f95fcadc425847d2c82",
+          "url": "https://github.com/AlexInLog/ito/commit/b5101b3e8201a791f0f7c7fc1003ec2f548c4f3c"
+        },
+        "date": 1784389168502,
+        "tool": "catch2",
+        "benches": [
+          {
+            "name": "creation of coro",
+            "value": 14.7655,
+            "range": "± 0.743683",
+            "unit": "ns",
+            "extra": "100 samples\n2100 iterations"
+          },
+          {
+            "name": "call no-op coro",
+            "value": 20.9121,
+            "range": "± 1.4799",
+            "unit": "ns",
+            "extra": "100 samples\n1495 iterations"
+          },
+          {
+            "name": "call_soon before no-op coro",
+            "value": 32.7712,
+            "range": "± 1.77303",
+            "unit": "ns",
+            "extra": "100 samples\n939 iterations"
+          },
+          {
+            "name": "call no-op coro as child",
+            "value": 38.2644,
+            "range": "± 1.64556",
+            "unit": "ns",
+            "extra": "100 samples\n802 iterations"
+          },
+          {
+            "name": "call coro calling function",
+            "value": 22.1458,
+            "range": "± 1.12422",
+            "unit": "ns",
+            "extra": "100 samples\n1397 iterations"
+          },
+          {
+            "name": "resolve future before await",
+            "value": 26.3235,
+            "range": "± 1.45023",
+            "unit": "ns",
+            "extra": "100 samples\n1130 iterations"
+          },
+          {
+            "name": "resolve future inside signal",
+            "value": 55.8034,
+            "range": "± 2.57204",
+            "unit": "ns",
+            "extra": "100 samples\n562 iterations"
+          },
+          {
+            "name": "unuqie_ptr",
+            "value": 21.5342,
+            "range": "± 1.31033",
+            "unit": "ns",
+            "extra": "100 samples\n1472 iterations"
+          },
+          {
+            "name": "small std::function",
+            "value": 1.84048,
+            "range": "± 0.887569",
+            "unit": "ns",
+            "extra": "100 samples\n17631 iterations"
+          },
+          {
+            "name": "big std::function",
+            "value": 24.5657,
+            "range": "± 1.12158",
+            "unit": "ns",
+            "extra": "100 samples\n1263 iterations"
           }
         ]
       }
