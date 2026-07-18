@@ -1,3 +1,5 @@
+#include "common.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/trompeloeil.hpp>
 #include <ito/coro.hpp>
@@ -11,65 +13,22 @@
 #include <memory>
 #include <stdexcept>
 
-
-struct lifetime_tracker // NOLINT (cppcoreguidelines-special-member-functions)
-{
-    virtual ~lifetime_tracker() = default;
-    lifetime_tracker()          = default;
-
-    MAKE_MOCK(call, auto()->void);
-};
-
-struct copy_count_tracker_impl
-{
-    MAKE_MOCK(copy_constructor, auto()->void);
-    MAKE_MOCK(move_constructor, auto()->void);
-};
-
-class copy_count_tracker
-{
-public:
-    copy_count_tracker()  = default;
-    ~copy_count_tracker() = default;
-
-    copy_count_tracker(const copy_count_tracker& v)
-        : m_impl(v.m_impl)
-    {
-        m_impl->copy_constructor();
-    }
-
-    copy_count_tracker(copy_count_tracker&& v) noexcept
-        : m_impl(std::move(v.m_impl))
-    {
-        m_impl->move_constructor();
-    }
-
-    copy_count_tracker& operator=(const copy_count_tracker& v)     = delete;
-    copy_count_tracker& operator=(copy_count_tracker&& v) noexcept = delete;
-
-    copy_count_tracker_impl& impl() { return *m_impl; }
-
-private:
-    std::shared_ptr<copy_count_tracker_impl> m_impl = std::make_shared<copy_count_tracker_impl>();
-};
-
-
 TEST_CASE("Validate base coroutine checks")
 {
-    auto owner = std::make_unique<trompeloeil::deathwatched<lifetime_tracker>>();
+    auto owner = std::make_unique<trompeloeil::deathwatched<call_mock>>();
     auto mock  = owner.get(); // use raw unowned pointer
 
     {
         REQUIRE_DESTRUCTION(*mock);
 
         auto make_coro = [&, c = std::move(owner)](auto...) -> ito::coro<int> {
-            c->call();
+            c->call(0);
             co_return 42;
         };
 
         SECTION("create and destruct coro")
         {
-            auto inner      = std::make_unique<trompeloeil::deathwatched<lifetime_tracker>>();
+            auto inner      = std::make_unique<trompeloeil::deathwatched<call_mock>>();
             auto inner_mock = inner.get(); // use raw unowned pointer
 
             {
@@ -82,11 +41,11 @@ TEST_CASE("Validate base coroutine checks")
 
         SECTION("create and run task")
         {
-            auto inner      = std::make_unique<trompeloeil::deathwatched<lifetime_tracker>>();
+            auto inner      = std::make_unique<trompeloeil::deathwatched<call_mock>>();
             auto inner_mock = inner.get(); // use raw unowned pointer
 
             auto coro = make_coro(std::move(inner));
-            REQUIRE_CALL(*mock, call());
+            REQUIRE_CALL(*mock, call(0));
 
             {
                 REQUIRE_DESTRUCTION(*inner_mock);
@@ -110,7 +69,7 @@ TEST_CASE("Validate base coroutine checks")
                 co_return co_await std::move(coro) + 2;
             };
 
-            REQUIRE_CALL(*mock, call());
+            REQUIRE_CALL(*mock, call(0));
             const auto res = ito::loop{}.run_until_complete(child_coro());
             REQUIRE(res == 44);
 
@@ -126,7 +85,7 @@ TEST_CASE("Validate base coroutine checks")
                 co_return std::to_string(co_await std::move(coro));
             };
 
-            REQUIRE_CALL(*mock, call());
+            REQUIRE_CALL(*mock, call(0));
             const auto res = ito::loop{}.run_until_complete(child_coro());
             REQUIRE(res == "42");
         }
@@ -139,7 +98,7 @@ TEST_CASE("Validate base coroutine checks")
                 co_return;
             };
 
-            REQUIRE_CALL(*mock, call());
+            REQUIRE_CALL(*mock, call(0));
             ito::loop{}.run_until_complete(child_coro());
             REQUIRE(child_res == 42);
         }
@@ -148,10 +107,10 @@ TEST_CASE("Validate base coroutine checks")
 
 TEST_CASE("return move_only value")
 {
-    auto owner = std::make_unique<trompeloeil::deathwatched<lifetime_tracker>>();
+    auto owner = std::make_unique<trompeloeil::deathwatched<call_mock>>();
     {
         auto mock      = owner.get();
-        auto make_task = [&]() -> ito::coro<std::unique_ptr<trompeloeil::deathwatched<lifetime_tracker>>> {
+        auto make_task = [&]() -> ito::coro<std::unique_ptr<trompeloeil::deathwatched<call_mock>>> {
             co_return std::move(owner);
         };
 
@@ -221,16 +180,16 @@ TEST_CASE("coro co_await suspend_always")
 
 TEST_CASE("nested co_await releases child coro exactly once")
 {
-    auto owner = std::make_unique<trompeloeil::deathwatched<lifetime_tracker>>();
+    auto owner = std::make_unique<trompeloeil::deathwatched<call_mock>>();
     auto mock  = owner.get();
 
-    auto make_child = [&]() -> ito::coro<std::unique_ptr<trompeloeil::deathwatched<lifetime_tracker>>> {
+    auto make_child = [&]() -> ito::coro<std::unique_ptr<trompeloeil::deathwatched<call_mock>>> {
         co_return std::move(owner);
     };
 
     auto child = make_child();
 
-    auto parent = [&]() -> ito::coro<std::unique_ptr<trompeloeil::deathwatched<lifetime_tracker>>> {
+    auto parent = [&]() -> ito::coro<std::unique_ptr<trompeloeil::deathwatched<call_mock>>> {
         co_return co_await std::move(child);
     };
 
@@ -247,7 +206,7 @@ TEST_CASE("nested co_await releases child coro exactly once")
     // коллапс на final_suspend), теперь должно быть контролируемое
     // исключение -- и, что важно, без повторного вызова .destroy()
     // на уже уничтоженном фрейме (иначе тут будет double-free).
-    auto parent2 = [&]() -> ito::coro<std::unique_ptr<trompeloeil::deathwatched<lifetime_tracker>>> {
+    auto parent2 = [&]() -> ito::coro<std::unique_ptr<trompeloeil::deathwatched<call_mock>>> {
         co_return co_await std::move(child);
     };
     REQUIRE_THROWS_AS(ito::loop{}.run_until_complete(parent2()), ito::exceptions::invalid_coro_handle_state);
@@ -261,7 +220,7 @@ TEST_CASE("nested co_await frees the child coroutine frame (no leak)")
     };
 
     auto parent = [&]() -> ito::coro<int> {
-        auto owner = std::make_unique<trompeloeil::deathwatched<lifetime_tracker>>();
+        auto owner = std::make_unique<trompeloeil::deathwatched<call_mock>>();
         auto mock  = owner.get();
         auto child = make_child(std::move(owner));
         int  res{};
@@ -284,7 +243,7 @@ TEST_CASE("nested co_await frees the child coroutine frame (no leak) even if sus
     };
 
     auto parent = [&]() -> ito::coro<int> {
-        auto owner = std::make_unique<trompeloeil::deathwatched<lifetime_tracker>>();
+        auto owner = std::make_unique<trompeloeil::deathwatched<call_mock>>();
         auto mock  = owner.get();
         auto child = make_child(std::move(owner));
         int  res{};

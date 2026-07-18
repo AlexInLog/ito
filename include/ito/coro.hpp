@@ -11,7 +11,7 @@
 namespace ito
 {
     class loop;
-    namespace internal
+    namespace details
     {
         struct void_t
         {
@@ -39,7 +39,7 @@ namespace ito
 
         template<typename T>
         struct typed_promise_type
-            : public internal::base_promise_type
+            : public details::base_promise_type
             , protected ito::details::utils::error_or_optional<T>
         {
             void unhandled_exception() { this->set_exception(std::current_exception()); }
@@ -60,7 +60,7 @@ namespace ito
         {
             void return_void() { this->set_result(); }
         };
-    } // namespace internal
+    } // namespace details
 
     template<typename T = void>
     class [[nodiscard("ito::coro object can't be discarded")]] coro
@@ -68,7 +68,7 @@ namespace ito
     public:
         friend class ito::loop;
 
-        struct promise_type : public internal::promise_type<T>
+        struct promise_type : public details::promise_type<T>
         {
             coro get_return_object() { return coro{std::coroutine_handle<promise_type>::from_promise(*this)}; }
         };

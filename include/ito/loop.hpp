@@ -56,12 +56,15 @@ namespace ito
             m_queue.emplace_back(std::forward<Fn>(callback));
         }
 
-        // static loop& current()
-        // {
-        //     if (auto loop = try_current()) return *loop;
-        //     throw exceptions::invalid_loop_state{"no loop is currently running on this thread"};
-        // }
-        // static loop* try_current() noexcept { return current_impl(); }
+        static loop& current()
+        {
+            const auto l = try_current();
+            if (!l) [[unlikely]]
+                throw exceptions::invalid_loop_state{"no loop is currently running on this thread"};
+
+            return *l;
+        }
+        static loop* try_current() noexcept { return current_impl(); }
 
     private:
         void run_until_complete_impl(std::coroutine_handle<> h)

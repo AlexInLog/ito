@@ -1,3 +1,5 @@
+#include "common.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/trompeloeil.hpp>
 #include <ito/coro.hpp>
@@ -7,11 +9,6 @@
 #include <trompeloeil/sequence.hpp>
 
 #include <coroutine>
-
-class call_mock
-{
-    MAKE_MOCK(call, auto(size_t)->void);
-};
 
 TEST_CASE("can't run loop inside loop")
 {
