@@ -19,6 +19,7 @@ What exists right now:
 - `ito::loop` — currently a synchronous, single-shot runner (`loop{}.run_until_complete(coro)`). Not yet a scheduler.
 - Exception propagation from the coroutine body to the caller via `ito::exceptions::*`.
 - Chaining: a `coro<T>` can `co_await` another `coro<U>`.
+- `ito::async::future<T>` - async version of future primitive to be able to `co_await` such an future till result is ready
 
 What's *not* here yet (see [Roadmap](#roadmap)): multi-threading, work-stealing, I/O, timers, cancellation.
 
