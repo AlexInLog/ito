@@ -17,10 +17,9 @@ Repo: https://github.com/AlexInLog/ito
   ctest --preset sanitize
   ```
 
-- **README/repo mismatch:** `README.md` documents `cmake --preset default`, but no `default` preset exists in
-  `CMakePresets.json`, and `CMakeUserPresets.json` is empty (`{"version": 4}`). That command doesn't work as committed —
-  either the README is stale or it depends on an uncommitted local preset. Didn't guess your actual day-to-day command;
-  fill in here once confirmed.
+- Day-to-day local builds use the `release` or `lint` configure presets (`lint` adds clang-tidy + cppcheck), build
+  preset `build`, test preset `tests`. `CMakeUserPresets.json` stays empty (`{"version": 4}`) — there's no local
+  `default` preset in use.
 - CI runs a GCC/Clang/MSVC/AppleClang matrix via GitHub Actions (`lint-ubuntu-gcc`, `lint-ubuntu-clang`, `lint-windows`,
   `lint-macos`, plus one job per sanitizer), all using `buildPreset: build`. `sanitize-msan` exists as a preset but is
   **not** run in CI.
