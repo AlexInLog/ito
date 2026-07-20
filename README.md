@@ -61,15 +61,23 @@ int main()
 `ito` is header-only; dependencies are managed with [Conan](https://conan.io/) and fetched automatically through `cmake-conan` on first configure.
 
 ```bash
-cmake --preset default
-cmake --build --preset default
+cmake --preset release
+cmake --build --preset build
+```
+
+For local development, `lint` runs the same build with clang-tidy + cppcheck enabled:
+
+```bash
+cmake --preset lint
+cmake --build --preset build
 ```
 
 Useful CMake options:
 
-| Option             | Default | Description                     |
-|---------------------|---------|----------------------------------|
-| `ITO_BUILD_TESTS`   | `ON`    | Build the test suite            |
+| Option                | Default | Description                     |
+|------------------------|---------|----------------------------------|
+| `ITO_BUILD_TESTS`      | `ON`    | Build the test suite            |
+| `ITO_BUILD_BENCHMARKS` | `ON`    | Build the benchmark suite       |
 
 Requires a C++20-capable compiler.
 
@@ -78,10 +86,22 @@ Requires a C++20-capable compiler.
 Tests use [Catch2](https://github.com/catchorg/Catch2) and [trompeloeil](https://github.com/rollbear/trompeloeil), and cover coroutine lifetime, result move/copy semantics, and exception propagation.
 
 ```bash
-ctest --preset default
+ctest --preset tests
 ```
 
-Sanitizer builds (ASan/UBSan, TSan) are available as build presets for local and CI use.
+Sanitizer builds (ASan, TSan, LSan, UBSan, MSan) are available as configure presets (`sanitize-asan`, `sanitize-tsan`,
+`sanitize-lsan`, `sanitize-ubsan`, `sanitize-msan`) for local and CI use — use the `sanitize` test preset with them:
+
+```bash
+cmake --preset sanitize-asan
+cmake --build --preset build
+ctest --preset sanitize
+```
+
+## Benchmarks
+
+Benchmarks live in `benchmarks/` and run via Catch2's benchmark support. CI tracks results over time and posts
+regressions (>200% threshold) as PR comments. Historical results: https://alexinlog.github.io/ito/dev/bench/
 
 ## License
 
