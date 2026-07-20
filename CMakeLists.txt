@@ -67,7 +67,6 @@ else()
         -Wformat=2
         -Wundef
         -Werror=float-equal
-        -Wshadow
 
         -Wno-gnu-zero-variadic-macro-arguments
         -Wno-error=maybe-uninitialized
