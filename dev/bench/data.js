@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784389168725,
+  "lastUpdate": 1784617804887,
   "repoUrl": "https://github.com/AlexInLog/ito",
   "entries": {
     "Ito benchmarks - Ubuntu - clang": [
@@ -354,6 +354,100 @@ window.BENCHMARK_DATA = {
             "range": "± 1.12158",
             "unit": "ns",
             "extra": "100 samples\n1263 iterations"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "32845901+AlexInLog@users.noreply.github.com",
+            "name": "Aleksey Loginov",
+            "username": "AlexInLog"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "58442ec92bc48003f4815349a000a3557acd98e9",
+          "message": "Minor reorg (#20)\n\n* make reorg\n\n* MD\n\n* revert",
+          "timestamp": "2026-07-21T10:07:32+03:00",
+          "tree_id": "3e1735d3bf1b418b32340376caf954a0c8a35016",
+          "url": "https://github.com/AlexInLog/ito/commit/58442ec92bc48003f4815349a000a3557acd98e9"
+        },
+        "date": 1784617804283,
+        "tool": "catch2",
+        "benches": [
+          {
+            "name": "unuqie_ptr",
+            "value": 14.7643,
+            "range": "± 1.91392",
+            "unit": "ns",
+            "extra": "100 samples\n2134 iterations"
+          },
+          {
+            "name": "small std::function",
+            "value": 2.21981,
+            "range": "± 0.372246",
+            "unit": "ns",
+            "extra": "100 samples\n13423 iterations"
+          },
+          {
+            "name": "big std::function",
+            "value": 21.2445,
+            "range": "± 3.52405",
+            "unit": "ns",
+            "extra": "100 samples\n1561 iterations"
+          },
+          {
+            "name": "resolve future before await",
+            "value": 30.3063,
+            "range": "± 6.20999",
+            "unit": "ns",
+            "extra": "100 samples\n1143 iterations"
+          },
+          {
+            "name": "resolve future inside signal",
+            "value": 47.374,
+            "range": "± 6.73218",
+            "unit": "ns",
+            "extra": "100 samples\n667 iterations"
+          },
+          {
+            "name": "creation of coro",
+            "value": 15.9835,
+            "range": "± 2.24193",
+            "unit": "ns",
+            "extra": "100 samples\n2041 iterations"
+          },
+          {
+            "name": "call no-op coro",
+            "value": 22.9849,
+            "range": "± 4.42542",
+            "unit": "ns",
+            "extra": "100 samples\n1466 iterations"
+          },
+          {
+            "name": "call_soon before no-op coro",
+            "value": 36.2281,
+            "range": "± 6.34677",
+            "unit": "ns",
+            "extra": "100 samples\n860 iterations"
+          },
+          {
+            "name": "call no-op coro as child",
+            "value": 45.3442,
+            "range": "± 9.82066",
+            "unit": "ns",
+            "extra": "100 samples\n780 iterations"
+          },
+          {
+            "name": "call coro calling function",
+            "value": 24.7088,
+            "range": "± 4.35278",
+            "unit": "ns",
+            "extra": "100 samples\n1380 iterations"
           }
         ]
       }
