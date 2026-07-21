@@ -110,9 +110,8 @@
     "buildPresets": [
         {
             "name" : "build",
-            "jobs" : 20,
             "configurePreset" : "base"
-        }  
+        }
     ],
     "testPresets": [
         {

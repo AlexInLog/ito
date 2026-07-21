@@ -10,14 +10,17 @@ class ItoConan(ConanFile):
 
     options = {
         "with_tests": [True, False],
+        "with_benchmarks": [True, False],
     }
     default_options = {
         "with_tests": False,
+        "with_benchmarks": False,
     }
 
     def requirements(self):
-        if self.options.with_tests:
+        if self.options.with_tests or self.options.with_benchmarks:
             self.requires("catch2/3.15.1")
+        if self.options.with_tests:
             self.requires("trompeloeil/49")
  
     def layout(self):

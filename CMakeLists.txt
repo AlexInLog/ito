@@ -111,10 +111,24 @@ if(ITO_ENABLE_UBSAN)
 
     target_compile_options(ito_project_options INTERFACE
         -fsanitize=undefined
+        -fno-sanitize-recover=undefined
     )
 
     target_link_options(ito_project_options INTERFACE
         -fsanitize=undefined
+    )
+
+endif()
+if(ITO_ENABLE_LSAN)
+
+    target_compile_options(ito_project_options INTERFACE
+        -fsanitize=leak
+        -g
+        -O1
+    )
+
+    target_link_options(ito_project_options INTERFACE
+        -fsanitize=leak
     )
 
 endif()

@@ -16,8 +16,8 @@ Checks:
     - 'google-explicit-constructor'
 WarningsAsErrors: '*'
 ExtraArgs:
-    - '-std=c++20' 
-# HeaderFilterRegex: './include/.*'
+    - '-std=c++20'
+HeaderFilterRegex: '.*/include/ito/.*'
 # AnalyzeTemporaryDtors: false
 FormatStyle: 'file'
 # HeaderFileExtensions:
@@ -33,7 +33,7 @@ CheckOptions:
   - { key: readability-identifier-naming.FunctionCase,          value: lower_case }
   - { key: readability-identifier-naming.VariableCase,          value: lower_case }
   - { key: readability-identifier-naming.GlobalConstantCase,    value: UPPER_CASE }
-  - { key: readability-identifier-naming.GlobalConstanPrefix,    value: g_ }
+  - { key: readability-identifier-naming.GlobalConstantPrefix,    value: g_ }
   - { key: readability-identifier-naming.StaticVariablePrefix,  value: s_ }
   - { key: readability-identifier-naming.TemplateParameterCase, value: CamelCase }
   - { key: readability-identifier-naming.TypeTemplateParameterCase, value: CamelCase }
