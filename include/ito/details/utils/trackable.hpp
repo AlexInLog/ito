@@ -69,7 +69,7 @@ namespace ito::details::utils
 
         template<typename... Args>
             requires std::constructible_from<T, Args&&...>
-        static std::tuple<trackable<T>, weak_view> create(Args&&... args)
+        static std::pair<trackable<T>, weak_view> create(Args&&... args)
         {
             trackable<T> obj{std::forward<Args>(args)...};
             weak_view    v{obj};
