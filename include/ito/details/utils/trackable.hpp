@@ -61,7 +61,7 @@ namespace ito::details::utils
             weak_view& operator=(const weak_view&) = delete;
             weak_view& operator=(weak_view&&)      = delete;
 
-            T* get() const { return m_object ? &m_object->get() : nullptr; }
+            [[nodiscard]] T* get() const { return m_object ? &m_object->get() : nullptr; }
 
         private:
             trackable<T>* m_object{};
