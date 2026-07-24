@@ -21,6 +21,13 @@ namespace ito
     public:
         friend class ito::loop;
 
+        task(task&&) noexcept = default;
+        ~task() noexcept      = default;
+
+        task& operator=(const task&) = delete;
+        task& operator=(task&&)      = delete;
+        task(const task&)            = delete;
+
         auto operator co_await() &&
         {
             if (!m_h.get())

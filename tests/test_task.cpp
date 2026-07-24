@@ -78,7 +78,7 @@ TEST_CASE("base task logic")
 
         REQUIRE(res == 4);
     }
-    SECTION("create three tasks inside coro and await thir while second destroyed before inside first")
+    SECTION("create three tasks inside coro and await third while second destroyed before inside first")
     {
         const auto res = l.run_until_complete([&]() -> ito::coro<int> {
             std::optional<ito::task<int>> task_2{};

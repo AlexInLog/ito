@@ -13,7 +13,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(ito
     VERSION 0.1.0
-    DESCRIPTION "C++20 async runtime with work-stealing scheduler"
+    DESCRIPTION "C++20/23 async runtime with work-stealing scheduler"
     LANGUAGES CXX
 )
 

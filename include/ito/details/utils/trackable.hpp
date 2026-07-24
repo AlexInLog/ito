@@ -8,9 +8,12 @@ namespace ito::details::utils
     template<typename T>
     class trackable
     {
+        struct inplace
+        {
+        };
         template<typename... Args>
             requires std::constructible_from<T, Args&&...>
-        explicit trackable(Args&&... args)
+        explicit trackable(inplace, Args&&... args)
             : m_object(std::forward<Args>(args)...)
         {
         }
@@ -71,7 +74,7 @@ namespace ito::details::utils
             requires std::constructible_from<T, Args&&...>
         static std::pair<trackable<T>, weak_view> create(Args&&... args)
         {
-            trackable<T> obj{std::forward<Args>(args)...};
+            trackable<T> obj{trackable<T>::inplace{}, std::forward<Args>(args)...};
             weak_view    v{obj};
 
             return {std::move(obj), std::move(v)};
