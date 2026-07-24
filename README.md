@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=AlexInLog_ito&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=AlexInLog_ito) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=AlexInLog_ito&metric=coverage)](https://sonarcloud.io/summary/new_code?id=AlexInLog_ito)
 
-A C++20 async runtime, aiming for an `asyncio`-style API with a work-stealing scheduler and an `io_uring`-based reactor.
+A C++20/23 async runtime, aiming for an `asyncio`-style API with a work-stealing scheduler and an `io_uring`-based reactor.
 
 > [!IMPORTANT]
 > **Status: early stage.** The public API is unstable and internals described in the roadmap below are not implemented yet. See [Current state](#current-state) for what actually exists today.
@@ -20,8 +20,11 @@ What exists right now:
 - Exception propagation from the coroutine body to the caller via `ito::exceptions::*`.
 - Chaining: a `coro<T>` can `co_await` another `coro<U>`.
 - `ito::async::future<T>` — async version of the future primitive, `co_await`-able until its result is ready.
+- `ito::task<T>` — created via `loop.create_task(coro)`, starts running independently of when (or whether) it's
+  `co_await`ed; destroying it before it's awaited cancels it.
 
-What's *not* here yet (see [Roadmap](#roadmap)): multi-threading, work-stealing, I/O, timers, cancellation.
+What's *not* here yet (see [Roadmap](#roadmap)): multi-threading, work-stealing, I/O, timers, cooperative cancellation
+of an already-running coroutine (`task<T>` only supports cancel-before-it-starts, via destroying it early).
 
 ### Example
 
@@ -45,6 +48,25 @@ int main()
     ito::loop loop;
     std::string   result = loop.run_until_complete(greet());
     // result == "answer: 42"
+}
+```
+
+`loop.create_task` starts a coroutine running on the next scheduler tick, whether or not you ever `co_await` it:
+
+```cpp
+#include <ito/coro.hpp>
+#include <ito/loop.hpp>
+#include <ito/task.hpp>
+
+int main()
+{
+    ito::loop loop;
+    int result = loop.run_until_complete([&loop]() -> ito::coro<int> {
+        auto task = loop.create_task(compute());
+        // other work can happen here while `task` runs concurrently
+        co_return co_await std::move(task);
+    }());
+    // result == 42
 }
 ```
 
@@ -79,7 +101,7 @@ Useful CMake options:
 | `ITO_BUILD_TESTS`      | `ON`    | Build the test suite            |
 | `ITO_BUILD_BENCHMARKS` | `ON`    | Build the benchmark suite       |
 
-Requires a C++20-capable compiler.
+Requires a C++23-capable compiler.
 
 ## Testing
 
