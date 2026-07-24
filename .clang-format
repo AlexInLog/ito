@@ -149,4 +149,5 @@ SpacesInContainerLiterals: true
 SpacesInParentheses: false
 TabWidth: 0
 UseTab: Never
+LineEnding: LF
 NamespaceMacros: ['BENCHMARK']
