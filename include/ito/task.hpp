@@ -9,7 +9,7 @@ namespace ito
     class loop;
 
     template<typename T>
-    class task
+    class [[nodiscard("ito::task can't be discarded")]] task
     {
     private:
         using handle_type = details::utils::trackable<details::utils::raii_coroutine_handle<typename coro<T>::promise_type>>;
