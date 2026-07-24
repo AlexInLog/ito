@@ -1,5 +1,4 @@
 #include <catch2/catch_template_test_macros.hpp>
-
 #include <ito/coro.hpp>
 #include <ito/loop.hpp>
 
