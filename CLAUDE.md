@@ -53,8 +53,6 @@ Repo: https://github.com/AlexInLog/ito
 - Coverage tooling (llvm-cov + SonarQube) has known false positives on branch merging for template instantiations —
   this is an upstream LLVM issue (llvm/llvm-project#93843, #111743, #119299), not a bug in this codebase. Don't "fix"
   coverage gaps that trace back to this.
-- `.clang-format` sets `UseCRLF: true` — this repo uses CRLF line endings despite being developed on Linux. Don't
-  "normalize" line endings to LF.
 
 ## CI
 

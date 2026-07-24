@@ -148,6 +148,5 @@ SpacesInConditionalStatement: false
 SpacesInContainerLiterals: true
 SpacesInParentheses: false
 TabWidth: 0
-UseCRLF: true
 UseTab: Never
 NamespaceMacros: ['BENCHMARK']
