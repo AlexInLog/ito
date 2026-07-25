@@ -1,6 +1,7 @@
 #pragma once
 
 #include <coroutine>
+#include <type_traits>
 #include <utility>
 
 namespace ito::details::utils
@@ -32,12 +33,13 @@ namespace ito::details::utils
 
     protected:
         [[nodiscard]] std::coroutine_handle<> get_impl() const & { return m_h; }
+        [[nodiscard]] std::coroutine_handle<> detach_impl() && { return std::exchange(m_h, {}); }
 
     private:
         std::coroutine_handle<> m_h{};
     };
 
-    template<typename TPromise>
+    template<typename TPromise = void>
     class raii_coroutine_handle final : private raii_coroutine_handle_base
     {
     public:
@@ -46,13 +48,19 @@ namespace ito::details::utils
         {
         }
 
+        explicit operator raii_coroutine_handle<>() && {
+            return raii_coroutine_handle<>{std::move(*this).detach_impl()};
+        }
+
         using raii_coroutine_handle_base::operator bool;
 
         TPromise* operator->() const { return &get().promise(); }
 
-        [[nodiscard]] std::coroutine_handle<TPromise> get() const
+        template<typename TargetType = TPromise>
+            requires (std::is_void_v<TargetType> || std::is_void_v<TPromise> || std::same_as<TargetType, TPromise>)
+        [[nodiscard]] std::coroutine_handle<TargetType> get() const
         {
-            return std::coroutine_handle<TPromise>::from_address(get_impl().address());
+            return std::coroutine_handle<TargetType>::from_address(get_impl().address());
         }
     };
 } // namespace ito::details::utils

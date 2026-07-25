@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ito/details/utils/raii_coroutine_handle.hpp"
+
 #include <ito/coro.hpp>
 #include <ito/details/utils/finally.hpp>
 #include <ito/details/utils/trackable.hpp>
@@ -54,7 +56,7 @@ namespace ito
 
             details::utils::raii_coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
 
-            run_until_complete_impl(h.get());
+            run_until_complete_impl(h.template get<void>());
 
             return h->get_result();
         }
@@ -62,9 +64,8 @@ namespace ito
         template<typename T>
         ito::task<T> create_task(ito::coro<T>&& coro)
         {
-            auto pair = details::utils::trackable<details::utils::raii_coroutine_handle<typename ito::coro<T>::promise_type>>::create(
-                std::move(coro).detach()
-            );
+            auto h    = static_cast<details::utils::raii_coroutine_handle<>>(std::move(coro).detach());
+            auto pair = details::utils::trackable<details::utils::raii_coroutine_handle<>>::create(std::move(h));
 
             call_soon([view = std::move(pair.second)]() {
                 if (const auto ptr = view.get())
