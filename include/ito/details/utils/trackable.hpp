@@ -21,14 +21,16 @@ namespace ito::details::utils
     public:
         ~trackable() noexcept
         {
-            if (m_view) m_view->m_object = nullptr;
+            if (m_view)
+                m_view->m_object = nullptr;
         }
 
         trackable(trackable&& o) noexcept
             : m_object(std::move(o.m_object))
             , m_view(std::exchange(o.m_view, nullptr))
         {
-            if (m_view) m_view->m_object = this;
+            if (m_view)
+                m_view->m_object = this;
         }
 
         trackable(const trackable&)            = delete;
@@ -51,13 +53,15 @@ namespace ito::details::utils
 
             ~weak_view() noexcept
             {
-                if (m_object) m_object->m_view = nullptr;
+                if (m_object)
+                    m_object->m_view = nullptr;
             }
 
             weak_view(weak_view&& o) noexcept
                 : m_object(std::exchange(o.m_object, nullptr))
             {
-                if (m_object) m_object->m_view = this;
+                if (m_object)
+                    m_object->m_view = this;
             }
 
             weak_view(const weak_view&)            = delete;

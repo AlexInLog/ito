@@ -1,10 +1,10 @@
 #pragma once
 
-#include "ito/details/utils/raii_coroutine_handle.hpp"
 
 #include <ito/coro.hpp>
 #include <ito/details/utils/finally.hpp>
 #include <ito/details/utils/trackable.hpp>
+#include <ito/details/utils/raii_coroutine_handle.hpp>
 #include <ito/exceptions.hpp>
 #include <ito/task.hpp>
 
@@ -13,6 +13,7 @@
 #include <deque>
 #include <functional>
 #include <utility>
+#include <variant>
 
 namespace ito::exceptions
 {
@@ -21,6 +22,32 @@ namespace ito::exceptions
         using ito_exception::ito_exception;
     };
 } // namespace ito::exceptions
+
+namespace ito::details
+{
+    struct coro_handle_executor
+    {
+        std::coroutine_handle<> handle;
+
+        void operator()() const
+        {
+            if (handle)
+                handle.resume();
+        }
+    };
+
+    struct trackable_view_coro_handle_executor
+    {
+        details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view handle;
+
+        void operator()() const
+        {
+            if (const auto* ptr = handle.get())
+                ptr->get().resume();
+        }
+    };
+
+} // namespace ito::details
 
 namespace ito
 {
@@ -67,12 +94,7 @@ namespace ito
             auto h    = static_cast<details::utils::raii_coroutine_handle<>>(std::move(coro).detach());
             auto pair = details::utils::trackable<details::utils::raii_coroutine_handle<>>::create(std::move(h));
 
-            call_soon([view = std::move(pair.second)]() {
-                if (const auto ptr = view.get())
-                {
-                    ptr->get().resume();
-                }
-            });
+            call_soon(details::trackable_view_coro_handle_executor{std::move(pair.second)});
 
             return ito::task<T>{std::move(pair.first)};
         }
@@ -98,18 +120,19 @@ namespace ito
         void run_until_complete_impl(std::coroutine_handle<> h)
         {
             if (!m_queue.empty())
-                m_queue.emplace_back([&h]() { h.resume(); });
+                m_queue.emplace_back(details::coro_handle_executor{h});
             else
                 h.resume();
 
             while (!h.done() && !m_queue.empty())
             {
                 const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
-                std::move(m_queue.front())();
+                std::visit([](auto&& v) { std::forward<decltype(v)>(v)(); }, std::move(m_queue.front()));
             }
         }
 
     private:
-        std::deque<std::move_only_function<void()>> m_queue{};
+        using variant_t = std::variant<details::coro_handle_executor, details::trackable_view_coro_handle_executor, std::function<void()>>;
+        std::deque<variant_t> m_queue{};
     };
 } // namespace ito

@@ -49,7 +49,8 @@ namespace ito::async
 
             auto operator co_await() &
             {
-                if (std::exchange(m_co_awaited, true)) throw ito::exceptions::future_just_awaited{"future is just was awaited before"};
+                if (std::exchange(m_co_awaited, true))
+                    throw ito::exceptions::future_just_awaited{"future is just was awaited before"};
 
                 struct awaitable
                 {
@@ -78,7 +79,8 @@ namespace ito::async
             [[nodiscard]] auto prepare_scheduling_continuation() const
             {
                 return [loop = m_continuation ? &ito::loop::current() : nullptr, this]() {
-                    if (loop) loop->call_soon(m_continuation);
+                    if (loop)
+                        loop->call_soon(m_continuation);
                 };
             }
 

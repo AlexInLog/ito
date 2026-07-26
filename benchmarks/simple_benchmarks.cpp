@@ -111,7 +111,7 @@ TEST_CASE("task")
         ito::loop loop{};
         meter.measure([&loop]() {
             return loop.run_until_complete([&loop]() -> ito::coro<int> {
-                auto task = loop.create_task([]() -> ito::coro<int> {
+                auto task   = loop.create_task([]() -> ito::coro<int> {
                     co_return 2;
                 }());
                 auto task_2 = loop.create_task([]() -> ito::coro<int> {
@@ -122,5 +122,4 @@ TEST_CASE("task")
             }());
         });
     };
-
 }

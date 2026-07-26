@@ -1,7 +1,7 @@
 #pragma once
 
-#include <coroutine>
 #include <concepts>
+#include <coroutine>
 #include <utility>
 
 namespace ito::details::utils
@@ -26,7 +26,8 @@ namespace ito::details::utils
 
         ~raii_coroutine_handle_base() noexcept
         {
-            if (m_h) m_h.destroy();
+            if (m_h)
+                m_h.destroy();
         }
 
         explicit operator bool() const { return !!m_h; }
@@ -48,9 +49,7 @@ namespace ito::details::utils
         {
         }
 
-        explicit operator raii_coroutine_handle<>() && {
-            return raii_coroutine_handle<>{std::move(*this).detach_impl()};
-        }
+        explicit operator raii_coroutine_handle<>() && { return raii_coroutine_handle<>{std::move(*this).detach_impl()}; }
 
         using raii_coroutine_handle_base::operator bool;
 
