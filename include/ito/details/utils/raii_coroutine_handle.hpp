@@ -2,6 +2,7 @@
 
 #include <concepts>
 #include <coroutine>
+#include <type_traits>
 #include <utility>
 
 namespace ito::details::utils
