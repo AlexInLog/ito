@@ -3,8 +3,8 @@
 
 #include <ito/coro.hpp>
 #include <ito/details/utils/finally.hpp>
-#include <ito/details/utils/trackable.hpp>
 #include <ito/details/utils/raii_coroutine_handle.hpp>
+#include <ito/details/utils/trackable.hpp>
 #include <ito/exceptions.hpp>
 #include <ito/task.hpp>
 
@@ -94,7 +94,7 @@ namespace ito
             auto h    = static_cast<details::utils::raii_coroutine_handle<>>(std::move(coro).detach());
             auto pair = details::utils::trackable<details::utils::raii_coroutine_handle<>>::create(std::move(h));
 
-            call_soon(details::trackable_view_coro_handle_executor{std::move(pair.second)});
+            m_queue.emplace_back(std::in_place_type_t<details::trackable_view_coro_handle_executor>{}, std::move(pair.second));
 
             return ito::task<T>{std::move(pair.first)};
         }
@@ -103,7 +103,7 @@ namespace ito
             requires std::invocable<std::decay_t<Fn>&&>
         void call_soon(Fn&& callback)
         {
-            m_queue.emplace_back(std::forward<Fn>(callback));
+            m_queue.emplace_back(std::in_place_type_t<std::function<void()>>{}, std::forward<Fn>(callback));
         }
 
         static loop& current()
@@ -120,7 +120,7 @@ namespace ito
         void run_until_complete_impl(std::coroutine_handle<> h)
         {
             if (!m_queue.empty())
-                m_queue.emplace_back(details::coro_handle_executor{h});
+                m_queue.emplace_back(std::in_place_type_t<details::coro_handle_executor>{}, h);
             else
                 h.resume();
 
