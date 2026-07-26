@@ -1,7 +1,7 @@
 #pragma once
 
 #include <coroutine>
-#include <type_traits>
+#include <concepts>
 #include <utility>
 
 namespace ito::details::utils
