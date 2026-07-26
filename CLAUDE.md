@@ -1,6 +1,6 @@
 # ito
 
-C++20/23 coroutine-based async runtime library. MIT licensed, header-only.
+C++20 coroutine-based async runtime library. MIT licensed, header-only.
 Repo: https://github.com/AlexInLog/ito
 
 ## Build and test
