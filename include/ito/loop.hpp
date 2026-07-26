@@ -92,11 +92,11 @@ namespace ito
         ito::task<T> create_task(ito::coro<T>&& coro)
         {
             auto h    = static_cast<details::utils::raii_coroutine_handle<>>(std::move(coro).detach());
-            auto pair = details::utils::trackable<details::utils::raii_coroutine_handle<>>::create(std::move(h));
+            auto [obj, view] = details::utils::trackable<details::utils::raii_coroutine_handle<>>::create(std::move(h));
 
-            m_queue.emplace_back(std::in_place_type_t<details::trackable_view_coro_handle_executor>{}, std::move(pair.second));
+            m_queue.emplace_back(std::in_place_type_t<details::trackable_view_coro_handle_executor>{}, std::move(view));
 
-            return ito::task<T>{std::move(pair.first)};
+            return ito::task<T>{std::move(obj)};
         }
 
         template<typename Fn>
