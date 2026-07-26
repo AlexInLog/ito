@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784617804887,
+  "lastUpdate": 1785082507163,
   "repoUrl": "https://github.com/AlexInLog/ito",
   "entries": {
     "Ito benchmarks - Ubuntu - clang": [
@@ -448,6 +448,107 @@ window.BENCHMARK_DATA = {
             "range": "± 4.35278",
             "unit": "ns",
             "extra": "100 samples\n1380 iterations"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "32845901+AlexInLog@users.noreply.github.com",
+            "name": "Aleksey Loginov",
+            "username": "AlexInLog"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7c86166524f555f99d013107d8f2e2caf8b8f167",
+          "message": "add task (#22)\n\n* add trackable objectT\n\n* fix header\n\n* add tests and implement task\n\n* format\n\n* extend with tests\n\n* nodiscard\n\n* crlf\n\n* crlf\n\n* benchmarks\n\n* update docs\n\n* fix comments\n\n* Refactor\n\n* update readme\n\n* header\n\n* optimize\n\n* revert version\n\n* optimize\n\n* headers\n\n* extend tests",
+          "timestamp": "2026-07-26T19:12:44+03:00",
+          "tree_id": "bcfe934cf77a74623724cbd5f7af5f3ae49e5a35",
+          "url": "https://github.com/AlexInLog/ito/commit/7c86166524f555f99d013107d8f2e2caf8b8f167"
+        },
+        "date": 1785082506968,
+        "tool": "catch2",
+        "benches": [
+          {
+            "name": "resolve future before await",
+            "value": 27.298,
+            "range": "± 1.53843",
+            "unit": "ns",
+            "extra": "100 samples\n1086 iterations"
+          },
+          {
+            "name": "resolve future inside signal",
+            "value": 50.0445,
+            "range": "± 2.84004",
+            "unit": "ns",
+            "extra": "100 samples\n584 iterations"
+          },
+          {
+            "name": "creation of coro",
+            "value": 14.3311,
+            "range": "± 0.756633",
+            "unit": "ns",
+            "extra": "100 samples\n2026 iterations"
+          },
+          {
+            "name": "call no-op coro",
+            "value": 21.1554,
+            "range": "± 2.86043",
+            "unit": "ns",
+            "extra": "100 samples\n1410 iterations"
+          },
+          {
+            "name": "call_soon before no-op coro",
+            "value": 34.2962,
+            "range": "± 1.60315",
+            "unit": "ns",
+            "extra": "100 samples\n842 iterations"
+          },
+          {
+            "name": "call no-op coro as child",
+            "value": 37.5318,
+            "range": "± 1.84546",
+            "unit": "ns",
+            "extra": "100 samples\n785 iterations"
+          },
+          {
+            "name": "call coro calling function",
+            "value": 21.7894,
+            "range": "± 1.03799",
+            "unit": "ns",
+            "extra": "100 samples\n1331 iterations"
+          },
+          {
+            "name": "unuqie_ptr",
+            "value": 13.6958,
+            "range": "± 0.718364",
+            "unit": "ns",
+            "extra": "100 samples\n2124 iterations"
+          },
+          {
+            "name": "small std::function",
+            "value": 2.19853,
+            "range": "± 0.198077",
+            "unit": "ns",
+            "extra": "100 samples\n13316 iterations"
+          },
+          {
+            "name": "big std::function",
+            "value": 18.7071,
+            "range": "± 1.0698",
+            "unit": "ns",
+            "extra": "100 samples\n1558 iterations"
+          },
+          {
+            "name": "start task inside coro and await",
+            "value": 53.0566,
+            "range": "± 3.31392",
+            "unit": "ns",
+            "extra": "100 samples\n552 iterations"
           }
         ]
       }
