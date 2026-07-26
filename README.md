@@ -16,15 +16,15 @@ Most C++ coroutine libraries either expose raw, easy-to-misuse primitives, or hi
 What exists right now:
 
 - `ito::coro<T>` — a lazily-started, single-owner coroutine type (`initial_suspend` = always suspend). Supports `T = void` and move-only result types.
-- `ito::loop` — scheduler for all coroutines and other tasks inside.
+- `ito::loop` — runs the coroutines and tasks scheduled onto it.
 - Exception propagation from the coroutine body to the caller via `ito::exceptions::*`.
 - Chaining: a `coro<T>` can `co_await` another `coro<U>`.
 - `ito::async::future<T>` — async version of the future primitive, `co_await`-able until its result is ready.
 - `ito::task<T>` — created via `loop.create_task(coro)`, starts running independently of when (or whether) it's
-  `co_await`ed; destroying it before it's awaited cancels it.
+  `co_await`ed; destroying it before it's awaited cancels it (only cancel-before-it-starts is supported, not
+  cancellation of an already-running coroutine).
 
-What's *not* here yet (see [Roadmap](#roadmap)): multi-threading, work-stealing, I/O, timers, cooperative cancellation
-of an already-running coroutine (`task<T>` only supports cancel-before-it-starts, via destroying it early).
+What's *not* here yet (see [Roadmap](#roadmap)): multi-threading, work-stealing, I/O, timers, cooperative cancellation.
 
 ### Example
 
@@ -45,13 +45,13 @@ ito::coro<std::string> greet()
 
 int main()
 {
-    ito::loop loop;
-    std::string   result = loop.run_until_complete(greet());
+    ito::loop   loop;
+    std::string result = loop.run_until_complete(greet());
     // result == "answer: 42"
 }
 ```
 
-`loop.create_task` starts a coroutine running on the next scheduler tick, whether or not you ever `co_await` it:
+`loop.create_task` queues a coroutine to start running on the next scheduler tick, whether or not you ever `co_await` it, as long as the task stays alive; destroying it before it's awaited cancels it:
 
 ```cpp
 #include <ito/coro.hpp>
@@ -61,9 +61,10 @@ int main()
 int main()
 {
     ito::loop loop;
-    int result = loop.run_until_complete([&loop]() -> ito::coro<int> {
+    int       result = loop.run_until_complete([&loop]() -> ito::coro<int> {
         auto task = loop.create_task(compute());
-        // other work can happen here while `task` runs concurrently
+        // `task` is queued, not running yet: it starts once this coroutine
+        // suspends, which is what `co_await` below does
         co_return co_await std::move(task);
     }());
     // result == 42
@@ -123,7 +124,7 @@ ctest --preset sanitize
 ## Benchmarks
 
 Benchmarks live in `benchmarks/` and run via Catch2's benchmark support. CI tracks results over time and posts
-regressions (>200% threshold) as PR comments. Historical results: https://alexinlog.github.io/ito/dev/bench/
+regressions (>200% threshold) as PR comments. Historical results: [alexinlog.github.io/ito/dev/bench](https://alexinlog.github.io/ito/dev/bench/)
 
 ## License
 
