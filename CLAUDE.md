@@ -1,6 +1,6 @@
 # ito
 
-C++20/23 coroutine-based async runtime library. MIT licensed, header-only.
+C++20 coroutine-based async runtime library. MIT licensed, header-only.
 Repo: https://github.com/AlexInLog/ito
 
 ## Build and test
@@ -30,7 +30,7 @@ Repo: https://github.com/AlexInLog/ito
   - `include/ito/details/` — implementation details not part of the public API (namespace-mirrored, see below).
   - `include/ito/async/` — async primitives (currently `future.hpp`).
 - Namespaces:
-  - `ito` — public API (`coro<T>`, `loop`).
+  - `ito` — public API (`coro<T>`, `loop`, `task<T>`).
   - `ito::async` — async primitives layered on top of `coro<T>`, e.g. `future<T>` (awaitable, settable from outside a coroutine).
   - `ito::details`, `ito::details::utils` — implementation internals, mirroring `include/ito/details/utils/`.
   - `ito::exceptions` — exception types thrown across the library (e.g. `future_just_awaited`).
@@ -40,8 +40,12 @@ Repo: https://github.com/AlexInLog/ito
 - `coro<T>` — the base coroutine type: lazily-started, single-owner (`initial_suspend` = always suspend).
 - `future<T>` — uses CRTP-based `set_value` specialization to handle `void` vs non-`void` results without duplicating
   the interface.
-- `task<T>` — a `spawn`-based wrapper around `coro<T>` with cancel-on-destroy semantics.
-- `paired_object<T>` — utility for mutual back-pointers between two objects.
+- `task<T>` — created via `loop::create_task(coro<T>&&)`; the loop schedules it to start running on the next
+  `call_soon` tick, independent of whether/when it's `co_await`ed. Destroying the `task<T>` before it's awaited
+  cancels it (the underlying coroutine handle is destroyed, so the body may never run past its next suspend point).
+- `details::utils::trackable<T>` — pairs an owning object with a single `weak_view` that gets nulled out when the
+  owner is destroyed or moved-from. Used by `task<T>`/`loop::create_task` so a task's scheduled resume lambda can
+  detect that the task was destroyed before it ran.
 - Scheduler components that aren't generic use a type-erased, compiled-core pattern rather than being templated — keep
   this pattern for new scheduler code unless there's a specific reason to templatize.
 
@@ -53,8 +57,6 @@ Repo: https://github.com/AlexInLog/ito
 - Coverage tooling (llvm-cov + SonarQube) has known false positives on branch merging for template instantiations —
   this is an upstream LLVM issue (llvm/llvm-project#93843, #111743, #119299), not a bug in this codebase. Don't "fix"
   coverage gaps that trace back to this.
-- `.clang-format` sets `UseCRLF: true` — this repo uses CRLF line endings despite being developed on Linux. Don't
-  "normalize" line endings to LF.
 
 ## CI
 

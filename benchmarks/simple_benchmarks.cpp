@@ -1,7 +1,6 @@
-#include <ito/async/future.hpp>
-
 #include <catch2/benchmark/catch_benchmark.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <ito/async/future.hpp>
 #include <ito/coro.hpp>
 #include <ito/loop.hpp>
 
@@ -88,6 +87,38 @@ TEST_CASE("future")
                 ito::async::future<int> f{};
                 loop.call_soon([&]() { f.set_result(10); });
                 co_return co_await f;
+            }());
+        });
+    };
+}
+
+TEST_CASE("task")
+{
+    BENCHMARK_ADVANCED("start task inside coro and await")(Catch::Benchmark::Chronometer meter)
+    {
+        ito::loop loop{};
+        meter.measure([&loop]() {
+            return loop.run_until_complete([&loop]() -> ito::coro<int> {
+                auto task = loop.create_task([]() -> ito::coro<int> {
+                    co_return 2;
+                }());
+                co_return co_await std::move(task);
+            }());
+        });
+    };
+    BENCHMARK_ADVANCED("start 2 tasks inside coro and await second")(Catch::Benchmark::Chronometer meter)
+    {
+        ito::loop loop{};
+        meter.measure([&loop]() {
+            return loop.run_until_complete([&loop]() -> ito::coro<int> {
+                auto task   = loop.create_task([]() -> ito::coro<int> {
+                    co_return 2;
+                }());
+                auto task_2 = loop.create_task([]() -> ito::coro<int> {
+                    co_return 3;
+                }());
+
+                co_return co_await std::move(task_2);
             }());
         });
     };

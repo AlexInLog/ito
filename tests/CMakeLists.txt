@@ -4,6 +4,7 @@ add_executable(ito_tests
     test_coro.cpp
     test_loop.cpp
     test_future.cpp
+    test_task.cpp
 
     common.hpp
 )
