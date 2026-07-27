@@ -39,6 +39,7 @@ endif(CCACHE)
 # -- Options ---------------------------------
 option(ITO_BUILD_TESTS "Build tests" ON)
 option(ITO_BUILD_BENCHMARKS "Build benchmarks" ON)
+option(ITO_BUILD_CODSPEED_BENCHMARKS "Build CodSpeed (Google Benchmark) benchmarks" OFF)
 
 option(ITO_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(ITO_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
@@ -193,9 +194,15 @@ if(ITO_BUILD_TESTS OR ITO_BUILD_BENCHMARKS)
 
         add_subdirectory(tests)
     endif()
-    if (ITO_BUILD_BENCHMARKS) 
-        add_subdirectory(benchmarks)
-    endif()
+endif()
+
+# ── Benchmarks ───────────────────────────────────────────────────────────────
+# The benchmarks subdirectory hosts both the Catch2 benchmarks (built when
+# ITO_BUILD_BENCHMARKS is ON) and the CodSpeed/Google Benchmark target (built
+# when ITO_BUILD_CODSPEED_BENCHMARKS is ON). The latter has no Catch2/Conan
+# dependency so it can be built standalone in CI.
+if(ITO_BUILD_BENCHMARKS OR ITO_BUILD_CODSPEED_BENCHMARKS)
+    add_subdirectory(benchmarks)
 endif()
 
 # ── Examples ───────────────────────────────────────────────────────────────────

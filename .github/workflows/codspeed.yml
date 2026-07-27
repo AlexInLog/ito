@@ -1,0 +1,62 @@
+name: CodSpeed Benchmarks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+  # `workflow_dispatch` allows CodSpeed to trigger backtest
+  # performance analysis in order to generate initial data.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmarks:
+    name: Run benchmarks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # required for actions/checkout
+      id-token: write # required for OIDC authentication with CodSpeed
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Cpp
+        uses: aminya/setup-cpp@v1
+        with:
+          compiler: gcc
+          cmake: true
+          ninja: true
+
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.12" }
+
+      # The top-level CMakeLists.txt wires in cmake-conan as a dependency
+      # provider, so a Conan installation and profile must be available even
+      # though the CodSpeed benchmark target itself has no Conan dependencies.
+      - name: Get Conan
+        uses: turtlebrowser/get-conan@main
+
+      - name: Detect Conan profile
+        run: conan profile detect --force
+
+      - name: Build the benchmark target
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCODSPEED_MODE=simulation \
+            -DITO_BUILD_TESTS=OFF \
+            -DITO_BUILD_BENCHMARKS=OFF \
+            -DITO_BUILD_CODSPEED_BENCHMARKS=ON
+          cmake --build build --target ito_codspeed_benchmarks -j
+
+      - name: Run the benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          mode: simulation
+          run: ./build/bin/ito_codspeed_benchmarks
