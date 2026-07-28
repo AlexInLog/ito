@@ -62,10 +62,15 @@
             ]
         },
         {
-            "name": "tests",
-            "displayName": "tests",
+            "name": "release-tests",
+            "displayName": "release tests",
             "inherits": ["release", "build-tests"]
         },
+        {
+            "name": "debug-tests",
+            "displayName": "debug tests",
+            "inherits": ["debug", "build-tests"]
+        }
         {
             "name": "benchmarks",
             "displayName": "benchmarks",
