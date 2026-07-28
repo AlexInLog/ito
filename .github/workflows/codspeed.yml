@@ -9,6 +9,13 @@ on:
   # performance analysis in order to generate initial data.
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CONAN_HOME: "${{ github.workspace }}/release/"
+
 jobs:
   benchmarks:
     name: Run benchmarks (${{ matrix.mode }})

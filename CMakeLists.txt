@@ -207,7 +207,7 @@ if (ITO_BUILD_BENCHMARKS)
     FetchContent_MakeAvailable(google_benchmark)
 
     # target_compile_options(benchmark_main PUBLIC -Wno-c2y-extensions)
-    target_compile_options(benchmark PUBLIC -Wno-c2y-extensions)
+    target_compile_options(benchmark PUBLIC -Wno-c2y-extensions PRIVATE -Wno-error)
 
     add_subdirectory(benchmarks)
 endif()
