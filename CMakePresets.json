@@ -26,6 +26,14 @@
             }
         },
         {
+            "name": "build-tests",
+            "hidden": true,
+            "cacheVariables": {
+                "ITO_BUILD_TESTS": "ON"
+            }
+        },
+
+        {
             "name": "debug",
             "displayName": "Debug",
             "inherits": "base",
@@ -49,14 +57,28 @@
             "inherits": [
                 "debug",
                 "clang-tidy",
-                "cppcheck"
+                "cppcheck",
+                "build-tests"
             ]
+        },
+        {
+            "name": "tests",
+            "displayName": "tests",
+            "inherits": ["release", "build-tests"]
+        },
+        {
+            "name": "benchmarks",
+            "displayName": "benchmarks",
+            "inherits": ["release"],
+            "cacheVariables": {
+                "ITO_BUILD_BENCHMARKS": "ON"
+            }
         },
 
         {
             "name": "coverage",
             "displayName": "Coverage",
-            "inherits": "debug",
+            "inherits": ["debug", "build-tests"],
             "cacheVariables": {
                 "ITO_ENABLE_COVERAGE": "ON"
             }
@@ -65,7 +87,7 @@
         {
             "name": "sanitize-asan",
             "displayName": "ASan",
-            "inherits": "debug",
+            "inherits": ["debug", "build-tests"],
             "cacheVariables": {
                 "ITO_ENABLE_ASAN": "ON"
             }
@@ -74,7 +96,7 @@
         {
             "name": "sanitize-tsan",
             "displayName": "TSan",
-            "inherits": "debug",
+            "inherits": ["debug", "build-tests"],
             "cacheVariables": {
                 "ITO_ENABLE_TSAN": "ON"
             }
@@ -83,7 +105,7 @@
         {
             "name": "sanitize-lsan",
             "displayName": "LSan",
-            "inherits": "debug",
+            "inherits": ["debug", "build-tests"],
             "cacheVariables": {
                 "ITO_ENABLE_LSAN": "ON"
             }
@@ -92,7 +114,7 @@
         {
             "name": "sanitize-msan",
             "displayName": "MSan",
-            "inherits": "debug",
+            "inherits": ["debug", "build-tests"],
             "cacheVariables": {
                 "ITO_ENABLE_MSAN": "ON"
             }
@@ -101,9 +123,29 @@
         {
             "name": "sanitize-ubsan",
             "displayName": "UBSan",
-            "inherits": "debug",
+            "inherits": ["debug", "build-tests"],
             "cacheVariables": {
                 "ITO_ENABLE_UBSAN": "ON"
+            }
+        },
+        {
+            "name": "codspeed-simulation",
+            "displayName": "CodSpeed benchmarks",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CODSPEED_MODE": "simulation",
+                "ITO_BUILD_BENCHMARKS": "ON"
+            }
+        },
+        {
+            "name": "codspeed-walltime",
+            "displayName": "CodSpeed benchmarks",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CODSPEED_MODE": "walltime",
+                "ITO_BUILD_BENCHMARKS": "ON"
             }
         }
     ],
