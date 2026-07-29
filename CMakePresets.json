@@ -148,7 +148,7 @@
             "displayName": "CodSpeed benchmarks",
             "inherits": "base",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_BUILD_TYPE": "Release",
                 "CODSPEED_MODE": "walltime",
                 "ITO_BUILD_BENCHMARKS": "ON"
             }
