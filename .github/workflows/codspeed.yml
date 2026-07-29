@@ -49,8 +49,6 @@ jobs:
             ${{ env.LOCALAPPDATA }}/ccache
             ${{ env.XDG_CACHE_HOME }}/ccache
           key: ${{ runner.os }}-deps-benchmark-${{ matrix.mode }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
-          restore-keys: |
-            ${{ runner.os }}-deps-benchmark-${{ matrix.mode }}-
 
       - name: Setup Cpp
         uses: aminya/setup-cpp@v1

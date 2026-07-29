@@ -54,8 +54,6 @@ jobs:
             ${{ env.LOCALAPPDATA }}/ccache
             ${{ env.XDG_CACHE_HOME }}/ccache
           key: ${{ runner.os }}-deps-tests--${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
-          restore-keys: |
-            ${{ runner.os }}-deps-tests--${{ matrix.config.name }}-
 
       - name: Setup Cpp
         if: ${{ matrix.config.os != 'windows-latest' }}
@@ -121,8 +119,6 @@ jobs:
             ${{ env.LOCALAPPDATA }}/ccache
             ${{ env.XDG_CACHE_HOME }}/ccache
           key: ${{ runner.os }}-deps-coverage--${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
-          restore-keys: |
-            ${{ runner.os }}-deps-coverage--
             
       - name: Setup Cpp
         uses: aminya/setup-cpp@v1
