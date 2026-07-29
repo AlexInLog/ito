@@ -1,6 +1,6 @@
 # ito
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=AlexInLog_ito&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=AlexInLog_ito) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=AlexInLog_ito&metric=coverage)](https://sonarcloud.io/summary/new_code?id=AlexInLog_ito)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=AlexInLog_ito&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=AlexInLog_ito) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=AlexInLog_ito&metric=coverage)](https://sonarcloud.io/summary/new_code?id=AlexInLog_ito) [![CodSpeed Badge](https://img.shields.io/endpoint?url=https://app.codspeed.io//badge.json)](https://app.codspeed.io//AlexInLog/ito?utm_source=badge)
 
 A C++20 async runtime, aiming for an `asyncio`-style API with a work-stealing scheduler and an `io_uring`-based reactor.
 
@@ -123,8 +123,8 @@ ctest --preset sanitize
 
 ## Benchmarks
 
-Benchmarks live in `benchmarks/` and run via Catch2's benchmark support. CI tracks results over time and posts
-regressions (>200% threshold) as PR comments. Historical results: [alexinlog.github.io/ito/dev/bench](https://alexinlog.github.io/ito/dev/bench/)
+Benchmarks live in `benchmarks/` and run via Google Benchmarks but patched by [codspeed.io](https://codspeed.io/). CI tracks results over time and posts
+regressions as PR comments. Historical results at [codspeed](https://app.codspeed.io/AlexInLog/ito)
 
 ## License
 
