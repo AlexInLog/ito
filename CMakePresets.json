@@ -70,7 +70,7 @@
             "name": "debug-tests",
             "displayName": "debug tests",
             "inherits": ["debug", "build-tests"]
-        }
+        },
         {
             "name": "benchmarks",
             "displayName": "benchmarks",
