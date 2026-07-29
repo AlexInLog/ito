@@ -37,8 +37,8 @@ if(CCACHE)
 endif(CCACHE)
 
 # -- Options ---------------------------------
-option(ITO_BUILD_TESTS "Build tests" ON)
-option(ITO_BUILD_BENCHMARKS "Build benchmarks" ON)
+option(ITO_BUILD_TESTS "Build tests" OFF)
+option(ITO_BUILD_BENCHMARKS "Build benchmarks" OFF)
 
 option(ITO_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(ITO_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
@@ -151,9 +151,6 @@ endif()
 if(ITO_BUILD_TESTS)
     set(CONAN_INSTALL_ARGS "${CONAN_INSTALL_ARGS};-o ito/*:with_tests=True")
 endif()
-if(ITO_BUILD_BENCHMARKS)
-    set(CONAN_INSTALL_ARGS "${CONAN_INSTALL_ARGS};-o ito/*:with_benchmarks=True")
-endif()
 
 
 # ── Library ────────────────────────────────────────────────────────────────────
@@ -165,25 +162,24 @@ target_include_directories(ito INTERFACE
 target_link_libraries(ito INTERFACE ito_project_options)
 
 # ── Tests ──────────────────────────────────────────────────────────────────────
-if(ITO_BUILD_TESTS OR ITO_BUILD_BENCHMARKS)
+if(ITO_BUILD_TESTS)
     find_package(Catch2 REQUIRED)
-    if (ITO_BUILD_TESTS)
-        find_package(trompeloeil REQUIRED)
+    find_package(trompeloeil REQUIRED)
 
-        enable_testing()
+    enable_testing()
 
-        set(ITO_TEST_RESULTS_DIR  ${CMAKE_BINARY_DIR}/test_results)
-        file(MAKE_DIRECTORY ${ITO_TEST_RESULTS_DIR})
+    set(ITO_TEST_RESULTS_DIR  ${CMAKE_BINARY_DIR}/test_results)
+    file(MAKE_DIRECTORY ${ITO_TEST_RESULTS_DIR})
 
-        set(ITO_COVERAGE_TARGETS -instr-profile=${ITO_TEST_RESULTS_DIR}/results.profdata -object $<TARGET_FILE:ito_tests>)
+    set(ITO_COVERAGE_TARGETS -instr-profile=${ITO_TEST_RESULTS_DIR}/results.profdata -object $<TARGET_FILE:ito_tests>)
 
-        macro(discover_tests TARGET)
-            target_link_libraries(${TARGET} PRIVATE ito_project_options)
-            include(Catch)
-            catch_discover_tests(${TARGET} PROPERTIES  ENVIRONMENT "LLVM_PROFILE_FILE=${ITO_TEST_RESULTS_DIR}/${TARGET}-%p.profraw" )
-        endmacro()
+    macro(discover_tests TARGET)
+        target_link_libraries(${TARGET} PRIVATE ito_project_options)
+        include(Catch)
+        catch_discover_tests(${TARGET} PROPERTIES  ENVIRONMENT "LLVM_PROFILE_FILE=${ITO_TEST_RESULTS_DIR}/${TARGET}-%p.profraw" )
+    endmacro()
 
-        add_custom_target(
+    add_custom_target(
             coverage
             COMMAND llvm-profdata merge -o ${ITO_TEST_RESULTS_DIR}/results.profdata ${ITO_TEST_RESULTS_DIR}/*.profraw
             COMMAND llvm-cov report --ignore-filename-regex=${CMAKE_BINARY_DIR} ${ITO_COVERAGE_TARGETS}
@@ -191,11 +187,30 @@ if(ITO_BUILD_TESTS OR ITO_BUILD_BENCHMARKS)
             COMMENT "Generating coverage report"
         )
 
-        add_subdirectory(tests)
-    endif()
-    if (ITO_BUILD_BENCHMARKS) 
-        add_subdirectory(benchmarks)
-    endif()
+    add_subdirectory(tests)
+endif()
+
+if (ITO_BUILD_BENCHMARKS)
+    set(BENCHMARK_DOWNLOAD_DEPENDENCIES ON CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_WERROR OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+
+    include(FetchContent)
+    FetchContent_Declare(
+      google_benchmark
+      GIT_REPOSITORY https://github.com/CodSpeedHQ/codspeed-cpp
+      SOURCE_SUBDIR google_benchmark
+      GIT_TAG v2.4.0
+      SYSTEM
+    )
+
+    FetchContent_MakeAvailable(google_benchmark)
+
+    target_compile_options(benchmark_main PRIVATE -Wno-error)
+    target_compile_options(benchmark PUBLIC -Wno-c2y-extensions PRIVATE -Wno-error)
+
+    add_subdirectory(benchmarks)
 endif()
 
 # ── Examples ───────────────────────────────────────────────────────────────────

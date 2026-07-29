@@ -6,9 +6,14 @@ Repo: https://github.com/AlexInLog/ito
 ## Build and test
 
 - Build system: CMake (presets, `Ninja` generator) + Conan (fetched automatically via `cmake-conan` on first configure).
-- Tests: Catch2 + trompeloeil.
-- Configure presets: `debug`, `release`, `lint` (debug + clang-tidy + cppcheck), `coverage`, and sanitizer presets
-  `sanitize-asan`, `sanitize-tsan`, `sanitize-lsan`, `sanitize-ubsan`, `sanitize-msan`.
+- Tests: Catch2 + trompeloeil. Benchmarks: Google Benchmark, fetched via CodSpeed's fork (`CodSpeedHQ/codspeed-cpp`)
+  through `FetchContent`, not Conan. It no longer uses Catch2's benchmark macros.
+- `ITO_BUILD_TESTS`/`ITO_BUILD_BENCHMARKS` default to `OFF` (opt-in); enable them via the presets below rather than
+  passing the cache variables directly.
+- Configure presets: `debug`, `release`, `lint` (debug + clang-tidy + cppcheck), `coverage`, `release-tests`/
+  `debug-tests` (adds `ITO_BUILD_TESTS`), `benchmarks` (adds `ITO_BUILD_BENCHMARKS`, inherits `release`), and
+  sanitizer presets `sanitize-asan`, `sanitize-tsan`, `sanitize-lsan`, `sanitize-ubsan`, `sanitize-msan`.
+  `codspeed-simulation`/`codspeed-walltime` are CI-only presets used by the CodSpeed workflow.
 - Build preset is always `build`; test presets are `tests` (default) or `sanitize` (sets ASAN/UBSAN/TSAN options).
 
   ```bash
@@ -65,6 +70,9 @@ Repo: https://github.com/AlexInLog/ito
   workflow.
 - Benchmarks run via `benchmark-action/github-action-benchmark`; results published to `gh-pages` only on push to
   `main`, posted as a PR comment otherwise.
+- `codspeed.yml` runs the Google Benchmark suite through CodSpeed (`simulation` and `walltime` modes, via a matrix),
+  reporting with `CodSpeedHQ/action`, on push to `main`, on PRs, and on `workflow_dispatch`. This is a separate
+  pipeline from the `benchmark-run`/`benchmark-report`/`benchmark-publish` jobs above.
 - Coverage: llvm-cov → SonarQube (`sonar.cfamily.compile-commands` fed from `build/compile_commands.json`).
 
 ## Code style
