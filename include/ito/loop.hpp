@@ -153,34 +153,7 @@ namespace ito
         }
 
 
-        [[nodiscard]] static auto sleep_until(std::chrono::steady_clock::time_point deadline)
-        {
-            class awaitable
-            {
-            public:
-                explicit awaitable(std::chrono::steady_clock::time_point deadline) noexcept
-                    : m_deadline(deadline)
-                {
-                }
-
-                [[nodiscard]] bool await_ready() const noexcept { return std::chrono::steady_clock::now() >= m_deadline; }
-
-                void await_suspend(std::coroutine_handle<> h)
-                {
-                    auto [obj, view] = details::utils::trackable<std::coroutine_handle<>>::create(h);
-                    m_handle.emplace(std::move(obj));
-                    loop::current().m_timers.push(m_deadline, std::move(view));
-                }
-
-                static constexpr void await_resume() noexcept { }
-
-            private:
-                std::chrono::steady_clock::time_point                             m_deadline;
-                std::optional<details::utils::trackable<std::coroutine_handle<>>> m_handle{};
-            };
-
-            return awaitable{deadline};
-        }
+        [[nodiscard]] static auto sleep_until(std::chrono::steady_clock::time_point deadline) { return sleep_awaitable{deadline}; }
 
         template<typename Rep, typename Period>
         [[nodiscard]] static auto sleep_for(std::chrono::duration<Rep, Period> duration)
@@ -199,6 +172,39 @@ namespace ito
         static loop* try_current() noexcept { return current_impl(); }
 
     private:
+        class sleep_awaitable
+        {
+        public:
+            explicit sleep_awaitable(std::chrono::steady_clock::time_point deadline) noexcept
+                : m_deadline(deadline)
+            {
+            }
+
+            auto operator co_await()
+            {
+                struct awaitable
+                {
+                    [[nodiscard]] bool await_ready() const noexcept { return std::chrono::steady_clock::now() >= deadline; }
+
+                    void await_suspend(std::coroutine_handle<> h)
+                    {
+                        auto [obj, view] = details::utils::trackable<std::coroutine_handle<>>::create(h);
+                        handle.emplace(std::move(obj));
+                        loop::current().m_timers.push(deadline, std::move(view));
+                    }
+
+                    static constexpr void await_resume() noexcept { }
+
+                    std::chrono::steady_clock::time_point                             deadline;
+                    std::optional<details::utils::trackable<std::coroutine_handle<>>> handle{};
+                };
+
+                return awaitable{.deadline = m_deadline};
+            }
+
+        private:
+            std::chrono::steady_clock::time_point m_deadline;
+        };
         void run_until_complete_impl(std::coroutine_handle<> h)
         {
             if (!m_queue.empty())
