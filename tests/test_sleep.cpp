@@ -20,7 +20,7 @@ TEST_CASE("sleep_* blocks until the deadline, then resumes")
             const auto start = std::chrono::steady_clock::now();
             loop.run_until_complete([&mock, &awaitable]() -> ito::coro<> {
                 mock.call(1);
-                co_await std::move(awaitable);
+                co_await awaitable();
                 mock.call(2);
                 co_return;
             }());
@@ -32,22 +32,22 @@ TEST_CASE("sleep_* blocks until the deadline, then resumes")
 
         SECTION("sleep_until")
         {
-            check(ito::async::sleep_until(std::chrono::steady_clock::now() + duration));
+            check([&](){ return ito::async::sleep_until(std::chrono::steady_clock::now() + duration);});
         }
 
         SECTION("sleep_for")
         {
-            check(ito::async::sleep_for(duration));
+            check([&](){ return ito::async::sleep_for(duration);});
         }
 
         SECTION("loop.sleep_until")
         {
-            check(loop.sleep_until(std::chrono::steady_clock::now() + duration));
+            check([&](){ return loop.sleep_until(std::chrono::steady_clock::now() + duration);});
         }
 
         SECTION("loop.sleep_for")
         {
-            check(loop.sleep_for(duration));
+            check([&](){ return loop.sleep_for(duration);});
         }
     };
 
