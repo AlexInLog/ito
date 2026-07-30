@@ -61,3 +61,7 @@ TEST_CASE("sleep_* blocks until the deadline, then resumes")
         check_for_duration(-std::chrono::milliseconds(5));
     }
 }
+
+TEST_CASE("sleep while another active tasks is not actually blocking loop") {
+    // TODO:
+}
