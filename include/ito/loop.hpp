@@ -85,7 +85,7 @@ namespace ito::details
         [[nodiscard]] trackable_view_coro_handle_executor pop_earliest()
         {
             std::pop_heap(m_entries.begin(), m_entries.end(), later);
-            auto _ = utils::finally{[&]() noexcept { m_entries.pop_back(); }};
+            auto _ = utils::finally{[this]() noexcept { m_entries.pop_back(); }};
             return std::move(m_entries.back().view);
         }
 

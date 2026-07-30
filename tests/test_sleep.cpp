@@ -1,10 +1,10 @@
 #include "common.hpp"
-#include <catch2/catch_test_macros.hpp>
-#include <trompeloeil/sequence.hpp>
 
+#include <catch2/catch_test_macros.hpp>
 #include <ito/async/sleep.hpp>
 #include <ito/coro.hpp>
 #include <ito/loop.hpp>
+#include <trompeloeil/sequence.hpp>
 
 TEST_CASE("sleep_* blocks until the deadline, then resumes")
 {
@@ -32,22 +32,22 @@ TEST_CASE("sleep_* blocks until the deadline, then resumes")
 
         SECTION("sleep_until")
         {
-            check([&](){ return ito::async::sleep_until(std::chrono::steady_clock::now() + duration);});
+            check([&]() { return ito::async::sleep_until(std::chrono::steady_clock::now() + duration); });
         }
 
         SECTION("sleep_for")
         {
-            check([&](){ return ito::async::sleep_for(duration);});
+            check([&]() { return ito::async::sleep_for(duration); });
         }
 
         SECTION("loop.sleep_until")
         {
-            check([&](){ return loop.sleep_until(std::chrono::steady_clock::now() + duration);});
+            check([&]() { return loop.sleep_until(std::chrono::steady_clock::now() + duration); });
         }
 
         SECTION("loop.sleep_for")
         {
-            check([&](){ return loop.sleep_for(duration);});
+            check([&]() { return loop.sleep_for(duration); });
         }
     };
 

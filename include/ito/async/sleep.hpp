@@ -6,7 +6,8 @@
 
 namespace ito::async
 {
-    inline auto sleep_for(std::chrono::nanoseconds duration)
+    template<typename Rep, typename Period>
+    inline auto sleep_for(std::chrono::duration<Rep, Period> duration)
     {
         return ito::loop::sleep_for(duration);
     }
