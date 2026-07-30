@@ -13,6 +13,7 @@
 #include <coroutine>
 #include <deque>
 #include <functional>
+#include <thread>
 #include <utility>
 #include <variant>
 
@@ -68,7 +69,7 @@ namespace ito::details
             trackable_view_coro_handle_executor   view;
         };
 
-        static bool later(const entry& a, const entry& b) { return a.deadline > b.deadline; }
+        static constexpr bool later(const entry& a, const entry& b) { return a.deadline > b.deadline; }
 
     public:
         void push(std::chrono::steady_clock::time_point deadline, details::utils::trackable<std::coroutine_handle<>>::weak_view view)
@@ -152,14 +153,13 @@ namespace ito
         }
 
 
-        [[nodiscard]] auto sleep_until(std::chrono::steady_clock::time_point deadline)
+        [[nodiscard]] static auto sleep_until(std::chrono::steady_clock::time_point deadline)
         {
             class awaitable
             {
             public:
-                awaitable(loop& l, std::chrono::steady_clock::time_point deadline) noexcept
-                    : m_loop(&l)
-                    , m_deadline(deadline)
+                explicit awaitable(std::chrono::steady_clock::time_point deadline) noexcept
+                    : m_deadline(deadline)
                 {
                 }
 
@@ -169,22 +169,21 @@ namespace ito
                 {
                     auto [obj, view] = details::utils::trackable<std::coroutine_handle<>>::create(h);
                     m_handle.emplace(std::move(obj));
-                    m_loop.m_timers.push(m_deadline, std::move(view));
+                    loop::current().m_timers.push(m_deadline, std::move(view));
                 }
 
                 static constexpr void await_resume() noexcept { }
 
             private:
-                loop*                                                             m_loop;
                 std::chrono::steady_clock::time_point                             m_deadline;
                 std::optional<details::utils::trackable<std::coroutine_handle<>>> m_handle{};
             };
 
-            return awaitable{*this, deadline};
+            return awaitable{deadline};
         }
 
         template<typename Rep, typename Period>
-        [[nodiscard]] auto sleep_for(std::chrono::duration<Rep, Period> duration)
+        [[nodiscard]] static auto sleep_for(std::chrono::duration<Rep, Period> duration)
         {
             return sleep_until(std::chrono::steady_clock::now() + duration);
         }
@@ -207,16 +206,33 @@ namespace ito
             else
                 h.resume();
 
-            while (!h.done() && !m_queue.empty())
+            while (!h.done() && (!m_queue.empty() || !m_timers.empty()))
             {
+                if (!m_timers.empty())
+                {
+                    const auto now = std::chrono::steady_clock::now();
+                    while (!m_timers.empty() && m_timers.next_deadline() <= now)
+                        m_queue.emplace_back(std::in_place_type_t<details::trackable_view_coro_handle_executor>{}, m_timers.pop_earliest());
+                }
+
+                if (m_queue.empty())
+                {
+                    std::this_thread::sleep_until(m_timers.next_deadline());
+                    continue;
+                }
+
                 const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
                 std::visit([](auto&& v) { std::forward<decltype(v)>(v)(); }, std::move(m_queue.front()));
             }
         }
 
     private:
-        using variant_t =
-            std::variant<details::coro_handle_executor, details::trackable_view_raii_coro_handle_executor, std::function<void()>>;
+        using variant_t = std::variant<
+            details::coro_handle_executor,
+            details::trackable_view_raii_coro_handle_executor,
+            details::trackable_view_coro_handle_executor,
+            std::function<void()>>;
         std::deque<variant_t> m_queue{};
+        details::timer_queue  m_timers{};
     };
 } // namespace ito

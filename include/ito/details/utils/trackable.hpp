@@ -11,6 +11,7 @@ namespace ito::details::utils
         struct inplace
         {
         };
+
         template<typename... Args>
             requires std::constructible_from<T, Args&&...>
         explicit trackable(inplace, Args&&... args)
@@ -79,12 +80,13 @@ namespace ito::details::utils
             weak_view& operator=(const weak_view&) = delete;
             weak_view& operator=(weak_view&& o) noexcept
             {
-
                 if (m_object)
                     m_object->m_view = nullptr;
+
                 m_object = std::exchange(o.m_object, nullptr);
                 if (m_object)
                     m_object->m_view = this;
+
                 return *this;
             }
 

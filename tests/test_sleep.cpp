@@ -14,30 +14,42 @@ TEST_CASE("loop sleep_* blocks until the deadline, then resumes")
     call_mock             mock{};
     trompeloeil::sequence s{};
 
+    const auto check_for_duration = [&](const std::chrono::milliseconds duration) {
+        auto check = [&](auto awaitable) {
+            REQUIRE_CALL(mock, call(1)).IN_SEQUENCE(s);
+            REQUIRE_CALL(mock, call(2)).IN_SEQUENCE(s);
+
+            const auto start = std::chrono::steady_clock::now();
+            loop.run_until_complete([&mock, &awaitable]() -> ito::coro<> {
+                mock.call(1);
+                co_await std::move(awaitable);
+                mock.call(2);
+                co_return;
+            }());
+            if (duration > duration.zero())
+                REQUIRE(std::chrono::steady_clock::now() - start >= duration);
+            else
+                REQUIRE(std::chrono::steady_clock::now() - start < -duration);
+        };
+
+        SECTION("sleep_until")
+        {
+            check(loop.sleep_until(std::chrono::steady_clock::now() + duration));
+        }
+
+        SECTION("sleep_for")
+        {
+            check(loop.sleep_for(duration));
+        }
+    };
+
+    SECTION("positive duration")
     {
-        REQUIRE_CALL(mock, call(1)).IN_SEQUENCE(s);
-        REQUIRE_CALL(mock, call(2)).IN_SEQUENCE(s);
-
-        const auto start = std::chrono::steady_clock::now();
-        loop.run_until_complete([&loop, &mock]() -> ito::coro<> {
-            mock.call(1);
-            co_await loop.sleep_until(std::chrono::steady_clock::now() + std::chrono::milliseconds(5));
-            mock.call(2);
-            co_return;
-        }());
-        REQUIRE(std::chrono::steady_clock::now() - start >= std::chrono::milliseconds(5));
+        check_for_duration(std::chrono::milliseconds(5));
     }
-}
 
-TEST_CASE("loop sleep_* with a past deadline resolves without blocking")
-{
-    ito::loop  loop{};
-    const auto start = std::chrono::steady_clock::now();
-
-    loop.run_until_complete([&loop]() -> ito::coro<> {
-        co_await loop.sleep_until(std::chrono::steady_clock::now() - std::chrono::hours(1));
-        co_return;
-    }());
-
-    REQUIRE(std::chrono::steady_clock::now() - start < std::chrono::milliseconds(5));
+    SECTION("negative duration doesn't block")
+    {
+        check_for_duration(-std::chrono::milliseconds(5));
+    }
 }
