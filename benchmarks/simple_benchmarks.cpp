@@ -59,7 +59,7 @@ BENCHMARK(bm_call_noop_coro_as_child);
 
 static void bm_call_coro_calling_function(benchmark::State& state)
 {
-    ito::loop loop{};
+    ito::loop        loop{};
     std::vector<int> vec(static_cast<std::size_t>(state.max_iterations));
     std::iota(vec.begin(), vec.end(), 0);
 

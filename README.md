@@ -23,8 +23,10 @@ What exists right now:
 - `ito::task<T>` — created via `loop.create_task(coro)`, starts running independently of when (or whether) it's
   `co_await`ed; destroying it before it's awaited cancels it (only cancel-before-it-starts is supported, not
   cancellation of an already-running coroutine).
+- `ito::async::sleep_for`/`ito::async::sleep_until` — suspend a coroutine until a duration elapses or a
+  `steady_clock` deadline is reached, backed by a timer queue on `ito::loop`.
 
-What's *not* here yet (see [Roadmap](#roadmap)): multi-threading, work-stealing, I/O, timers, cooperative cancellation.
+What's *not* here yet (see [Roadmap](#roadmap)): multi-threading, work-stealing, I/O, cooperative cancellation.
 
 ### Example
 
@@ -71,11 +73,31 @@ int main()
 }
 ```
 
+`ito::async::sleep_for`/`sleep_until` suspend the calling coroutine without blocking other queued work; the loop
+resumes it once its deadline is reached:
+
+```cpp
+#include <ito/async/sleep.hpp>
+#include <ito/coro.hpp>
+#include <ito/loop.hpp>
+
+#include <chrono>
+
+int main()
+{
+    ito::loop loop;
+    loop.run_until_complete([]() -> ito::coro<> {
+        co_await ito::async::sleep_for(std::chrono::milliseconds(10));
+        co_return;
+    }());
+}
+```
+
 ## Roadmap
 
 - [ ] Work-stealing multi-threaded scheduler
 - [ ] `io_uring`-based reactor for async I/O
-- [ ] Timers / sleep
+- [x] Timers / sleep
 - [ ] Cancellation
 - [ ] Structured concurrency helpers (`join`, `select`, task groups)
 
@@ -106,7 +128,7 @@ Requires a C++20-capable compiler.
 
 ## Testing
 
-Tests use [Catch2](https://github.com/catchorg/Catch2) and [trompeloeil](https://github.com/rollbear/trompeloeil), and cover coroutine lifetime, result move/copy semantics, and exception propagation.
+Tests use [Catch2](https://github.com/catchorg/Catch2) and [trompeloeil](https://github.com/rollbear/trompeloeil), and cover coroutine lifetime, result move/copy semantics, exception propagation, and timer/sleep scheduling.
 
 ```bash
 ctest --preset tests
