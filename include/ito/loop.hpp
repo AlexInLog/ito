@@ -221,12 +221,12 @@ namespace ito
                     const auto now = std::chrono::steady_clock::now();
                     while (!m_timers.empty() && m_timers.next_deadline() <= now)
                         m_queue.emplace_back(std::in_place_type_t<details::trackable_view_coro_handle_executor>{}, m_timers.pop_earliest());
-                }
 
-                if (m_queue.empty())
-                {
-                    std::this_thread::sleep_until(m_timers.next_deadline());
-                    continue;
+                    if (m_queue.empty())
+                    {
+                        std::this_thread::sleep_until(m_timers.next_deadline());
+                        continue;
+                    }
                 }
 
                 const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
