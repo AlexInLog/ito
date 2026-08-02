@@ -39,7 +39,7 @@ namespace ito::async
             }
 
             promise_base(const promise_base&)            = delete;
-            promise_base(promise_base&&)                 = default;
+            promise_base(promise_base&&) noexcept        = default;
             promise_base& operator=(const promise_base&) = delete;
             promise_base& operator=(promise_base&&)      = delete;
 
