@@ -24,7 +24,7 @@ namespace ito::async
         struct future_state
         {
             ito::details::utils::error_or_optional<T> value{};
-            ito::details::utils::coroutine_handle<>    continuation{};
+            ito::details::utils::coroutine_handle<>   continuation{};
         };
 
         template<typename T = void>
@@ -118,7 +118,7 @@ namespace ito::async
                     return !ptr || ptr->value.is_ready();
                 }
 
-                auto await_suspend(std::coroutine_handle<> h) 
+                auto await_suspend(std::coroutine_handle<> h)
                 {
                     const auto ptr = view.get();
                     if (ptr)

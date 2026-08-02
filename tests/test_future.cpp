@@ -78,7 +78,7 @@ TEST_CASE("future basics")
     {
         const auto res = loop.run_until_complete([&]() -> ito::coro<int> {
             auto [promise, fut] = ito::async::promise<int>::create();
-            int  value           = 10;
+            int value           = 10;
 
             loop.call_soon([&]() { mock.call(0); });
             loop.call_soon([&]() {
@@ -140,7 +140,9 @@ TEST_CASE("future basics")
             // drop `promise` while `task` is still suspended awaiting its `future`: the
             // shared state must stay alive long enough to deliver `broken_future` to `task`,
             // not just quietly leave it suspended forever
-            { auto discard = std::move(promise); }
+            {
+                auto discard = std::move(promise);
+            }
 
             // `task` must actually resume with `broken_future` rather than hang; awaiting it
             // here both drives that resume through the loop and observes the exception
