@@ -35,11 +35,25 @@ namespace ito::async
             {
                 if (m_value->continuation)
                     if (const auto loop = ito::loop::try_current())
-                        loop->call_soon(std::move(m_value->continuation).detach());
+                        // call_soon() can throw (e.g. std::bad_alloc from the queue); swallow it
+                        // rather than let it escape this noexcept destructor and terminate()
+                        try
+                        {
+                            loop->call_soon(std::move(m_value->continuation).detach());
+                        }
+                        catch (...) // NOLINT(bugprone-empty-catch) NOSONAR
+                        {
+                            // deliberately empty: this destructor must stay noexcept, and there is
+                            // nothing sensible to do with a failed best-effort notification here
+                        }
             }
 
+            // The move constructor is intentionally left defaulted: all state that the destructor
+            // above cares about (`m_value->continuation`) lives inside the `trackable` member, whose
+            // own move constructor already re-points the associated `weak_view`/clears the source
+            // correctly. There is nothing left for this class to additionally manage on move.
             promise_base(const promise_base&)            = delete;
-            promise_base(promise_base&&) noexcept        = default;
+            promise_base(promise_base&&) noexcept        = default; // NOSONAR: resource management is delegated to m_value
             promise_base& operator=(const promise_base&) = delete;
             promise_base& operator=(promise_base&&)      = delete;
 

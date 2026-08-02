@@ -25,7 +25,10 @@ namespace ito::details::utils
             m_handle = std::exchange(o.m_handle, {});
             return *this;
         }
-        ~coroutine_handle() noexcept = default;
+        // Deliberately non-owning: unlike raii_coroutine_handle, this type never calls .destroy() on
+        // the wrapped handle. It only exists to give a plain std::coroutine_handle<T> move-clears-source
+        // semantics (see the move constructor above), not to manage the coroutine frame's lifetime.
+        ~coroutine_handle() noexcept = default; // NOSONAR: no resource is owned here by design
 
         std::coroutine_handle<T>*       operator->() { return &m_handle; }
         const std::coroutine_handle<T>* operator->() const { return &m_handle; }
