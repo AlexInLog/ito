@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <ito/coro.hpp>
 #include <ito/details/utils/finally.hpp>
 #include <ito/details/utils/raii_coroutine_handle.hpp>
@@ -8,6 +7,7 @@
 #include <ito/exceptions.hpp>
 #include <ito/task.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <concepts>
 #include <coroutine>
@@ -16,6 +16,7 @@
 #include <thread>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace ito::exceptions
 {
@@ -27,46 +28,38 @@ namespace ito::exceptions
 
 namespace ito::details
 {
-    struct coro_handle_executor
+    struct loop_entry_executor
     {
-        std::coroutine_handle<> handle;
-
-        void operator()() const
+        void operator()(const std::coroutine_handle<>& handle) const
         {
             if (handle)
                 handle.resume();
         }
-    };
 
-    struct trackable_view_raii_coro_handle_executor
-    {
-        details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view handle;
-
-        void operator()() const
+        void operator()(const details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view& handle) const
         {
             if (const auto* ptr = handle.get())
                 ptr->get().resume();
         }
-    };
 
-    struct trackable_view_coro_handle_executor
-    {
-        details::utils::trackable<std::coroutine_handle<>>::weak_view handle;
-
-        void operator()() const
+        void operator()(const details::utils::trackable<std::coroutine_handle<>>::weak_view& handle) const
         {
             if (const auto* ptr = handle.get())
                 ptr->resume();
         }
+        void operator()(const std::function<void()>& handle) const
+        {
+            if (handle)
+                handle();
+        }
     };
-
 
     class timer_queue
     {
         struct entry
         {
-            std::chrono::steady_clock::time_point deadline;
-            trackable_view_coro_handle_executor   view;
+            std::chrono::steady_clock::time_point                         deadline;
+            details::utils::trackable<std::coroutine_handle<>>::weak_view view;
         };
 
         static constexpr bool later(const entry& a, const entry& b) { return a.deadline > b.deadline; }
@@ -82,7 +75,7 @@ namespace ito::details
 
         [[nodiscard]] std::chrono::steady_clock::time_point next_deadline() const { return m_entries.front().deadline; }
 
-        [[nodiscard]] trackable_view_coro_handle_executor pop_earliest()
+        [[nodiscard]] details::utils::trackable<std::coroutine_handle<>>::weak_view pop_earliest()
         {
             std::pop_heap(m_entries.begin(), m_entries.end(), later);
             auto _ = utils::finally{[this]() noexcept { m_entries.pop_back(); }};
@@ -157,6 +150,12 @@ namespace ito
     public:
         loop() = default;
 
+        using loop_entry_t = std::variant<
+            std::coroutine_handle<>,
+            details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view,
+            details::utils::trackable<std::coroutine_handle<>>::weak_view,
+            std::function<void()>>;
+
         template<typename T>
         T run_until_complete(ito::coro<T>&& coro)
         {
@@ -175,18 +174,20 @@ namespace ito
             auto h           = static_cast<details::utils::raii_coroutine_handle<>>(std::move(coro).detach());
             auto [obj, view] = details::utils::trackable<details::utils::raii_coroutine_handle<>>::create(std::move(h));
 
-            m_queue.emplace_back(std::in_place_type_t<details::trackable_view_raii_coro_handle_executor>{}, std::move(view));
+            m_queue.emplace_back(
+                std::in_place_type_t<details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view>{},
+                std::move(view)
+            );
 
             return ito::task<T>{std::move(obj)};
         }
 
         template<typename Fn>
-            requires std::invocable<std::decay_t<Fn>&&>
+            requires std::constructible_from<loop_entry_t, Fn&&>
         void call_soon(Fn&& callback)
         {
-            m_queue.emplace_back(std::in_place_type_t<std::function<void()>>{}, std::forward<Fn>(callback));
+            m_queue.emplace_back(std::forward<Fn>(callback));
         }
-
 
         [[nodiscard]] static auto sleep_until(std::chrono::steady_clock::time_point deadline) { return sleep_awaitable{deadline}; }
 
@@ -210,7 +211,7 @@ namespace ito
         void run_until_complete_impl(std::coroutine_handle<> h)
         {
             if (!m_queue.empty())
-                m_queue.emplace_back(std::in_place_type_t<details::coro_handle_executor>{}, h);
+                m_queue.emplace_back(std::in_place_type_t<std::coroutine_handle<>>{}, h);
             else
                 h.resume();
 
@@ -220,7 +221,10 @@ namespace ito
                 {
                     const auto now = std::chrono::steady_clock::now();
                     while (!m_timers.empty() && m_timers.next_deadline() <= now)
-                        m_queue.emplace_back(std::in_place_type_t<details::trackable_view_coro_handle_executor>{}, m_timers.pop_earliest());
+                        m_queue.emplace_back(
+                            std::in_place_type_t<details::utils::trackable<std::coroutine_handle<>>::weak_view>{},
+                            m_timers.pop_earliest()
+                        );
 
                     if (m_queue.empty())
                     {
@@ -230,17 +234,12 @@ namespace ito
                 }
 
                 const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
-                std::visit([](auto&& v) { std::forward<decltype(v)>(v)(); }, std::move(m_queue.front()));
+                std::visit(details::loop_entry_executor{}, std::move(m_queue.front()));
             }
         }
 
     private:
-        using variant_t = std::variant<
-            details::coro_handle_executor,
-            details::trackable_view_raii_coro_handle_executor,
-            details::trackable_view_coro_handle_executor,
-            std::function<void()>>;
-        std::deque<variant_t> m_queue{};
-        details::timer_queue  m_timers{};
+        std::deque<loop_entry_t> m_queue{};
+        details::timer_queue     m_timers{};
     };
 } // namespace ito
