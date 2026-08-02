@@ -49,8 +49,10 @@ namespace ito::details::utils
             return *this;
         }
 
-        T& get() { return m_object; }
-        T* operator->() { return &m_object; }
+        T&       get() { return m_object; }
+        const T& get() const { return m_object; }
+        T*       operator->() { return &m_object; }
+        const T* operator->() const { return &m_object; }
 
         class weak_view
         {

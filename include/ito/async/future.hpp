@@ -1,14 +1,15 @@
 #pragma once
 
 #include <ito/details/utils/error_or_optional.hpp>
+#include <ito/details/utils/trackable.hpp>
 #include <ito/loop.hpp>
 
 #include <coroutine>
-#include <exception>
+#include <utility>
 
 namespace ito::exceptions
 {
-    struct future_just_awaited final : public ito_exception
+    struct broken_future final : public ito_exception
     {
         using ito_exception::ito_exception;
     };
@@ -19,100 +20,180 @@ namespace ito::async
     namespace details
     {
         template<typename T = void>
-        class future_base
+        struct future_state
+        {
+            future_state()  = default;
+            ~future_state() = default;
+
+            future_state(future_state&& o) noexcept
+                : value{std::move(o.value)}
+                , continuation{std::exchange(o.continuation, {})}
+            {
+            }
+
+            future_state& operator=(future_state&&) = delete;
+            future_state(const future_state&)        = delete;
+            future_state& operator=(const future_state&) = delete;
+
+            ito::details::utils::error_or_optional<T> value{};
+            std::coroutine_handle<>                   continuation{};
+        };
+
+        template<typename T = void>
+        class promise_base
         {
         public:
-            future_base()           = default;
-            ~future_base() noexcept = default;
+            ~promise_base() noexcept
+            {
+                if (!is_ready() && m_value->continuation)
+                    if (const auto loop = ito::loop::try_current())
+                        loop->call_soon(m_value->continuation);
+            }
 
-            future_base(const future_base&)            = delete;
-            future_base& operator=(const future_base&) = delete;
-            future_base(future_base&&)                 = delete;
-            future_base& operator=(future_base&&)      = delete;
+            promise_base(const promise_base&)            = delete;
+            promise_base(promise_base&&)                 = default;
+            promise_base& operator=(const promise_base&) = delete;
+            promise_base& operator=(promise_base&&)      = delete;
 
             template<typename... TT>
             void set_result_impl(TT&&... v)
             {
                 auto prepared = this->prepare_scheduling_continuation();
-                m_value.set_result(std::forward<TT>(v)...);
+                m_value->value.set_result(std::forward<TT>(v)...);
                 prepared();
             }
 
             void set_exception(const std::exception_ptr& err)
             {
                 auto prepared = this->prepare_scheduling_continuation();
-                m_value.set_exception(err);
+                m_value->value.set_exception(err);
                 prepared();
             }
 
-            [[nodiscard]] bool is_ready() const { return this->m_value.is_ready(); }
+            [[nodiscard]] bool is_ready() const { return m_value->value.is_ready(); }
 
-            auto operator co_await() &
+        protected:
+            explicit promise_base(ito::details::utils::trackable<details::future_state<T>> value)
+                : m_value{std::move(value)}
             {
-                if (std::exchange(m_co_awaited, true))
-                    throw ito::exceptions::future_just_awaited{"future is just was awaited before"};
-
-                struct awaitable
-                {
-                    future_base<T>* self{};
-
-                    explicit awaitable(future_base<T>* s)
-                        : self(s)
-                    {
-                    }
-                    ~awaitable() noexcept { self->m_continuation = {}; }
-
-                    awaitable(const awaitable&)            = delete;
-                    awaitable& operator=(const awaitable&) = delete;
-
-                    awaitable(awaitable&& o) noexcept = delete;
-                    awaitable& operator=(awaitable&&) = delete;
-
-                    constexpr bool await_ready() noexcept { return self->m_value.is_ready(); }
-                    auto           await_suspend(std::coroutine_handle<> h) noexcept { self->m_continuation = h; }
-                    T              await_resume() { return self->m_value.get_result(); }
-                };
-                return awaitable{this};
             }
 
         private:
             [[nodiscard]] auto prepare_scheduling_continuation() const
             {
-                return [loop = m_continuation ? &ito::loop::current() : nullptr, this]() {
+                return [loop = m_value->continuation ? &ito::loop::current() : nullptr, this]() {
                     if (loop)
-                        loop->call_soon(m_continuation);
+                        loop->call_soon(m_value->continuation);
                 };
             }
 
         private:
-            ito::details::utils::error_or_optional<T> m_value{};
-            std::coroutine_handle<>                   m_continuation{};
-            bool                                      m_co_awaited{};
+            ito::details::utils::trackable<details::future_state<T>> m_value{};
         };
-
     } // namespace details
 
     template<typename T = void>
-    class future final : private details::future_base<T>
+    class promise;
+
+    template<typename T = void>
+    class future
     {
     public:
+        friend class promise<T>;
+
+        auto operator co_await() &&
+        {
+            struct awaitable
+            {
+                ito::details::utils::trackable<details::future_state<T>>::weak_view view;
+
+                explicit awaitable(ito::details::utils::trackable<details::future_state<T>>::weak_view&& view)
+                    : view{std::move(view)}
+                {
+                }
+
+                ~awaitable() noexcept
+                {
+                    if (const auto ptr = view.get())
+                        ptr->continuation = {};
+                }
+
+                awaitable(const awaitable&)            = delete;
+                awaitable& operator=(const awaitable&) = delete;
+
+                awaitable(awaitable&& o) noexcept = delete;
+                awaitable& operator=(awaitable&&) = delete;
+
+                constexpr bool await_ready() noexcept
+                {
+                    const auto ptr = view.get();
+                    return !ptr || ptr->value.is_ready();
+                }
+
+                auto await_suspend(std::coroutine_handle<> h) 
+                {
+                    const auto ptr = view.get();
+                    if (ptr)
+                        ptr->continuation = h;
+                    else
+                        throw ito::exceptions::broken_future{"no associated future state"};
+                }
+
+                T await_resume()
+                {
+                    const auto ptr = view.get();
+                    if (!ptr)
+                        throw ito::exceptions::broken_future{"no associated future state"};
+                    return ptr->value.get_result();
+                }
+            };
+            return awaitable{std::move(m_view)};
+        }
+
+    private:
+        explicit future(ito::details::utils::trackable<details::future_state<T>>::weak_view view)
+            : m_view{std::move(view)}
+        {
+        }
+
+        ito::details::utils::trackable<details::future_state<T>>::weak_view m_view;
+    };
+
+    template<typename T>
+    class promise final : private details::promise_base<T>
+    {
+    public:
+        [[nodiscard]] static std::pair<promise<T>, future<T>> create()
+        {
+            auto [obj, view] = ito::details::utils::trackable<details::future_state<T>>::create();
+            return {promise<T>{std::move(obj)}, future<T>{std::move(view)}};
+        }
+
         void set_result(const T& v) { this->set_result_impl(v); }
         void set_result(T&& v) { this->set_result_impl(std::move(v)); }
 
-        using details::future_base<T>::set_exception;
-        using details::future_base<T>::is_ready;
-        using details::future_base<T>::operator co_await;
+        using details::promise_base<T>::set_exception;
+
+    private:
+        using details::promise_base<T>::promise_base;
     };
 
     template<>
-    class future<void> final : private details::future_base<void>
+    class promise<void> final : private details::promise_base<void>
     {
     public:
+        [[nodiscard]] static std::pair<promise<void>, future<void>> create()
+        {
+            auto [obj, view] = ito::details::utils::trackable<details::future_state<void>>::create();
+            return {promise<void>{std::move(obj)}, future<void>{std::move(view)}};
+        }
+
         void set_result() { this->set_result_impl(); }
 
-        using details::future_base<void>::set_exception;
-        using details::future_base<void>::is_ready;
-        using details::future_base<void>::operator co_await;
+        using details::promise_base<void>::set_exception;
+
+    private:
+        using details::promise_base<void>::promise_base;
     };
 
 } // namespace ito::async

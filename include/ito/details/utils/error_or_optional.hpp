@@ -37,6 +37,7 @@ namespace ito::details::utils
             m_value.template emplace<1>(v);
         }
 
+        // TODO: clear state
         T&& get_result_impl()
         {
             return std::visit(
@@ -53,7 +54,7 @@ namespace ito::details::utils
         void ensure_not_set()
         {
             if (is_ready()) [[unlikely]]
-                throw ito::exceptions::value_is_set{"value is just set"};
+                throw ito::exceptions::value_is_set{"value is already set"};
         }
 
     private:
