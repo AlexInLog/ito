@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ito/details/utils/coroutine_handle.hpp>
 #include <ito/details/utils/error_or_optional.hpp>
 #include <ito/details/utils/trackable.hpp>
 #include <ito/loop.hpp>
@@ -22,21 +23,8 @@ namespace ito::async
         template<typename T = void>
         struct future_state
         {
-            future_state()  = default;
-            ~future_state() = default;
-
-            future_state(future_state&& o) noexcept
-                : value{std::move(o.value)}
-                , continuation{std::exchange(o.continuation, {})}
-            {
-            }
-
-            future_state& operator=(future_state&&) = delete;
-            future_state(const future_state&)        = delete;
-            future_state& operator=(const future_state&) = delete;
-
             ito::details::utils::error_or_optional<T> value{};
-            std::coroutine_handle<>                   continuation{};
+            ito::details::utils::coroutine_handle<>    continuation{};
         };
 
         template<typename T = void>
@@ -47,7 +35,7 @@ namespace ito::async
             {
                 if (!is_ready() && m_value->continuation)
                     if (const auto loop = ito::loop::try_current())
-                        loop->call_soon(m_value->continuation);
+                        loop->call_soon(std::move(m_value->continuation).detach());
             }
 
             promise_base(const promise_base&)            = delete;
@@ -79,11 +67,11 @@ namespace ito::async
             }
 
         private:
-            [[nodiscard]] auto prepare_scheduling_continuation() const
+            [[nodiscard]] auto prepare_scheduling_continuation()
             {
                 return [loop = m_value->continuation ? &ito::loop::current() : nullptr, this]() {
                     if (loop)
-                        loop->call_soon(m_value->continuation);
+                        loop->call_soon(std::move(m_value->continuation).detach());
                 };
             }
 
@@ -115,7 +103,7 @@ namespace ito::async
                 ~awaitable() noexcept
                 {
                     if (const auto ptr = view.get())
-                        ptr->continuation = {};
+                        ptr->continuation = ito::details::utils::coroutine_handle<>{};
                 }
 
                 awaitable(const awaitable&)            = delete;
@@ -134,7 +122,7 @@ namespace ito::async
                 {
                     const auto ptr = view.get();
                     if (ptr)
-                        ptr->continuation = h;
+                        ptr->continuation = ito::details::utils::coroutine_handle<>{h};
                     else
                         throw ito::exceptions::broken_future{"no associated future state"};
                 }

@@ -9,6 +9,7 @@ namespace ito::details::utils
     class coroutine_handle
     {
     public:
+        coroutine_handle() = default;
         explicit coroutine_handle(std::coroutine_handle<T> h)
             : m_handle(std::move(h))
         {
@@ -29,7 +30,11 @@ namespace ito::details::utils
         std::coroutine_handle<T>*       operator->() { return &m_handle; }
         const std::coroutine_handle<T>* operator->() const { return &m_handle; }
 
-        explicit operator bool() const { return m_handle; }
+        [[nodiscard]] std::coroutine_handle<T> get() const { return m_handle; }
+
+        [[nodiscard]] std::coroutine_handle<T> detach() && { return std::exchange(m_handle, {}); }
+
+        explicit operator bool() const { return static_cast<bool>(m_handle); }
 
     private:
         std::coroutine_handle<T> m_handle{};

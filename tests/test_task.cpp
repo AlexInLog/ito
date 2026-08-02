@@ -111,11 +111,11 @@ TEST_CASE("base task logic")
     }
     SECTION("destroy task while it's suspended awaiting a future, then resolve the future")
     {
-        ito::async::future<int> f{};
+        auto [promise, f] = ito::async::promise<int>::create();
 
         auto inner = [&]() -> ito::coro<int> {
             mock.call(-1);
-            const int v = co_await f;
+            const int v = co_await std::move(f);
             mock.call(v);
             co_return v + 1;
         };
@@ -127,11 +127,11 @@ TEST_CASE("base task logic")
 
             // hop through the loop once so `task` actually starts and suspends on `co_await f`,
             // rather than being cancelled before it ever ran
-            ito::async::future<> tick{};
-            l.call_soon([&]() { tick.set_result(); });
+            auto [tick_promise, tick] = ito::async::promise<>::create();
+            l.call_soon([&]() { tick_promise.set_result(); });
             {
                 REQUIRE_CALL(mock, call(-1));
-                co_await tick;
+                co_await std::move(tick);
             }
 
             // `task`'s coroutine is currently suspended inside `co_await f`; destroying it here
@@ -143,6 +143,6 @@ TEST_CASE("base task logic")
         // if `f` still held the destroyed coroutine's handle as its continuation, this would
         // resume freed memory instead of being a harmless no-op (and `mock.call` would never
         // fire, since nothing set up a REQUIRE_CALL for it)
-        REQUIRE_NOTHROW(f.set_result(42));
+        REQUIRE_NOTHROW(promise.set_result(42));
     }
 }
