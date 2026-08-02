@@ -69,9 +69,11 @@ Repo: https://github.com/AlexInLog/ito
   this is an upstream LLVM issue (llvm/llvm-project#93843, #111743, #119299), not a bug in this codebase. Don't "fix"
   coverage gaps that trace back to this.
 - `promise<T>`'s destructor schedules a resume via `loop::try_current()` (not `loop::current()`) specifically because
-  it must stay `noexcept`-safe — if you touch that destructor, don't switch it back to the throwing lookup, and don't
-  reintroduce a scheduling call there without also checking `!is_ready()`, or a promise resolved and destroyed in
-  quick succession will double-schedule its awaiter's resume (UB).
+  it must stay `noexcept`-safe — if you touch that destructor, don't switch it back to the throwing lookup.
+  Double-scheduling a resume (UB) is guarded by `future_state<T>::continuation`'s own move/`detach()` semantics
+  clearing it the instant a resume is scheduled, not by checking `is_ready()` — if you change how `continuation` is
+  consumed, make sure whatever claims it still clears it in the same step, or a promise resolved and destroyed in
+  quick succession will double-schedule its awaiter's resume.
 
 ## CI
 

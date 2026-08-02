@@ -33,7 +33,7 @@ namespace ito::async
         public:
             ~promise_base() noexcept
             {
-                if (!is_ready() && m_value->continuation)
+                if (m_value->continuation)
                     if (const auto loop = ito::loop::try_current())
                         loop->call_soon(std::move(m_value->continuation).detach());
             }
@@ -69,6 +69,7 @@ namespace ito::async
         private:
             [[nodiscard]] auto prepare_scheduling_continuation()
             {
+                // we are doing it as lambda to try to catch loop BEFORE actual value changes so crash would happen BEFORE
                 return [loop = m_value->continuation ? &ito::loop::current() : nullptr, this]() {
                     if (loop)
                         loop->call_soon(std::move(m_value->continuation).detach());

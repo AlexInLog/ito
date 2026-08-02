@@ -35,6 +35,22 @@ TEST_CASE("future basics")
             }()),
             ito::exceptions::empty_value
         );
+
+        SECTION("and then resolve the promise anyway")
+        {
+            // run_until_complete() above threw and unwound, destroying the still-suspended
+            // coroutine; that destruction already tore down the `co_await std::move(res)`
+            // awaitable (clearing this promise's continuation), so resolving it now, with no
+            // one left listening, must be a harmless no-op rather than a resume through freed
+            // memory
+            promise.set_result(20);
+
+            loop.run_until_complete([&]() -> ito::coro<> {
+                auto [inner_promise, inner_res] = ito::async::promise<int>::create();
+                loop.call_soon([&]() { inner_promise.set_result(10); });
+                co_await std::move(inner_res);
+            }());
+        }
     }
 
     SECTION("resolve future before await")
