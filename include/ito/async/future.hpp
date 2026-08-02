@@ -164,7 +164,10 @@ namespace ito::async
         using details::promise_base<T>::set_exception;
 
     private:
-        using details::promise_base<T>::promise_base;
+        explicit promise(ito::details::utils::trackable<details::future_state<T>>&& value)
+            : details::promise_base<T>{std::move(value)}
+        {
+        }
     };
 
     template<>
@@ -182,7 +185,10 @@ namespace ito::async
         using details::promise_base<void>::set_exception;
 
     private:
-        using details::promise_base<void>::promise_base;
+        explicit promise(ito::details::utils::trackable<details::future_state<void>>&& value)
+            : details::promise_base<void>{std::move(value)}
+        {
+        }
     };
 
 } // namespace ito::async
