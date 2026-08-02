@@ -101,9 +101,12 @@ TEST_CASE("sleep while another active tasks is active")
             REQUIRE_CALL(mock, call(-3)).IN_SEQUENCE(s);
             REQUIRE_CALL(mock, call(20)).IN_SEQUENCE(s);
             REQUIRE_CALL(mock, call(20)).IN_SEQUENCE(s);
-            REQUIRE_CALL(mock, call(-2)).IN_SEQUENCE(s);
+            const auto last = NAMED_REQUIRE_CALL(mock, call(-2)).IN_SEQUENCE(s);
 
-            co_await ito::async::sleep_for(std::chrono::milliseconds(8));
+            while (!last->is_satisfied())
+            {
+                co_await ito::async::sleep_for(std::chrono::milliseconds(10));
+            }
         }
 
         REQUIRE_CALL(mock, call(-1)).IN_SEQUENCE(s);
