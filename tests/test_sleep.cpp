@@ -4,7 +4,10 @@
 #include <ito/async/sleep.hpp>
 #include <ito/coro.hpp>
 #include <ito/loop.hpp>
+#include <trompeloeil/mock.hpp>
 #include <trompeloeil/sequence.hpp>
+
+#include <chrono>
 
 TEST_CASE("sleep_* blocks until the deadline, then resumes")
 {
@@ -62,6 +65,54 @@ TEST_CASE("sleep_* blocks until the deadline, then resumes")
     }
 }
 
-TEST_CASE("sleep while another active tasks is not actually blocking loop") {
-    // TODO:
+TEST_CASE("sleep while another active tasks is active")
+{
+    ito::loop             loop{};
+    call_mock             mock{};
+    trompeloeil::sequence s{};
+
+    auto create_coro = [&]() -> ito::coro<void> {
+        auto coro_1 = [&]() -> ito::coro<void> {
+            mock.call(2);
+            for (size_t i = 0; i < 3; ++i)
+            {
+                co_await ito::async::sleep_for(std::chrono::milliseconds(2));
+                mock.call(20);
+            }
+            mock.call(-2);
+        };
+        auto coro_2 = [&]() -> ito::coro<void> {
+            mock.call(3);
+            co_await ito::async::sleep_for(std::chrono::milliseconds(3));
+            mock.call(-3);
+        };
+
+        auto task_1 = ito::loop::current().create_task(coro_1());
+        auto task_2 = ito::loop::current().create_task(coro_2());
+
+        {
+            REQUIRE_CALL(mock, call(1)).IN_SEQUENCE(s);
+            mock.call(1);
+        }
+        {
+            REQUIRE_CALL(mock, call(2)).IN_SEQUENCE(s);
+            REQUIRE_CALL(mock, call(3)).IN_SEQUENCE(s);
+            REQUIRE_CALL(mock, call(20)).IN_SEQUENCE(s);
+            REQUIRE_CALL(mock, call(-3)).IN_SEQUENCE(s);
+            REQUIRE_CALL(mock, call(20)).IN_SEQUENCE(s);
+            REQUIRE_CALL(mock, call(20)).IN_SEQUENCE(s);
+            const auto last = NAMED_REQUIRE_CALL(mock, call(-2)).IN_SEQUENCE(s);
+
+            while (!last->is_satisfied())
+            {
+                co_await ito::async::sleep_for(std::chrono::milliseconds(10));
+            }
+        }
+
+        REQUIRE_CALL(mock, call(-1)).IN_SEQUENCE(s);
+        mock.call(-1);
+
+        co_return;
+    };
+    loop.run_until_complete(create_coro());
 }
