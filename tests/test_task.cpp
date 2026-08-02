@@ -116,7 +116,7 @@ TEST_CASE("base task logic")
         auto inner = [&]() -> ito::coro<int> {
             mock.call(-1);
             const int v = co_await f;
-            mock.call(static_cast<size_t>(v));
+            mock.call(v);
             co_return v + 1;
         };
 

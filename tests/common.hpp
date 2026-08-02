@@ -8,7 +8,7 @@ struct call_mock // NOLINT (cppcoreguidelines-special-member-functions)
     virtual ~call_mock() = default;
     call_mock()          = default;
 
-    MAKE_MOCK(call, auto(size_t)->void);
+    MAKE_MOCK(call, auto(int)->void);
 };
 
 struct copy_count_tracker_impl
