@@ -33,19 +33,23 @@ namespace ito::async
         public:
             ~promise_base() noexcept
             {
-                if (m_value->continuation)
-                    if (const auto loop = ito::loop::try_current())
+                if (m_value->continuation) [[unlikely]]
+                {
+                    if (const auto loop = ito::loop::try_current()) [[likely]]
+                    {
                         // call_soon() can throw (e.g. std::bad_alloc from the queue); swallow it
                         // rather than let it escape this noexcept destructor and terminate()
                         try
                         {
                             loop->call_soon(std::move(m_value->continuation).detach());
                         }
-                        catch (...) // NOLINT(bugprone-empty-catch) NOSONAR
+                        catch (...) // NOLINT(bugprone-empty-catch) 
                         {
                             // deliberately empty: this destructor must stay noexcept, and there is
                             // nothing sensible to do with a failed best-effort notification here
                         }
+                    }
+                }
             }
 
             // The move constructor is intentionally left defaulted: all state that the destructor
@@ -53,7 +57,7 @@ namespace ito::async
             // own move constructor already re-points the associated `weak_view`/clears the source
             // correctly. There is nothing left for this class to additionally manage on move.
             promise_base(const promise_base&)            = delete;
-            promise_base(promise_base&&) noexcept        = default; // NOSONAR: resource management is delegated to m_value
+            promise_base(promise_base&&) noexcept        = default; 
             promise_base& operator=(const promise_base&) = delete;
             promise_base& operator=(promise_base&&)      = delete;
 
@@ -135,8 +139,7 @@ namespace ito::async
 
                 auto await_suspend(std::coroutine_handle<> h)
                 {
-                    const auto ptr = view.get();
-                    if (ptr)
+                    if (const auto ptr = view.get()) [[likely]]
                         ptr->continuation = ito::details::utils::coroutine_handle<>{h};
                     else
                         throw ito::exceptions::broken_future{"no associated future state"};
@@ -144,10 +147,10 @@ namespace ito::async
 
                 T await_resume()
                 {
-                    const auto ptr = view.get();
-                    if (!ptr)
-                        throw ito::exceptions::broken_future{"no associated future state"};
-                    return ptr->value.get_result();
+                    if (const auto ptr = view.get()) [[likely]]
+                        return ptr->value.get_result();
+
+                    throw ito::exceptions::broken_future{"no associated future state"};
                 }
             };
             return awaitable{std::move(m_view)};
