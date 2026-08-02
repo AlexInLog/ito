@@ -76,14 +76,14 @@ TEST_CASE("sleep while another active tasks is active")
             mock.call(2);
             for (size_t i = 0; i < 3; ++i)
             {
-                co_await ito::async::sleep_for(std::chrono::milliseconds(1));
+                co_await ito::async::sleep_for(std::chrono::milliseconds(2));
                 mock.call(20);
             }
             mock.call(-2);
         };
         auto coro_2 = [&]() -> ito::coro<void> {
             mock.call(3);
-            co_await ito::async::sleep_for(std::chrono::milliseconds(2));
+            co_await ito::async::sleep_for(std::chrono::milliseconds(3));
             mock.call(-3);
         };
 
@@ -103,7 +103,7 @@ TEST_CASE("sleep while another active tasks is active")
             REQUIRE_CALL(mock, call(20)).IN_SEQUENCE(s);
             REQUIRE_CALL(mock, call(-2)).IN_SEQUENCE(s);
 
-            co_await ito::async::sleep_for(std::chrono::milliseconds(5));
+            co_await ito::async::sleep_for(std::chrono::milliseconds(8));
         }
 
         REQUIRE_CALL(mock, call(-1)).IN_SEQUENCE(s);
