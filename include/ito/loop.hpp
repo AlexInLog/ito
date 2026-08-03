@@ -207,7 +207,8 @@ namespace ito
 
         static loop& current()
         {
-            if (const auto l = try_current()) [[likely]]
+            const auto l = try_current();
+            if (l) [[likely]]
                 return *l;
 
             throw_no_active_loop();
