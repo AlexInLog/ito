@@ -99,9 +99,19 @@ namespace ito::async
             {
                 if (!ptr->value.is_ready()) [[unlikely]]
                 {
-                    ptr->value.set_exception(
-                        std::make_exception_ptr(ito::exceptions::broken_future{"promise object destroyed unresolved"})
-                    );
+                    // set_exception()/make_exception_ptr() can throw (e.g. std::bad_alloc); swallow it
+                    // rather than let it escape this noexcept destructor and terminate() — the
+                    // continuation, if any, still gets scheduled below and observes an empty value
+                    // instead of broken_future in this vanishingly rare case
+                    try
+                    {
+                        ptr->value.set_exception(
+                            std::make_exception_ptr(ito::exceptions::broken_future{"promise object destroyed unresolved"})
+                        );
+                    }
+                    catch (...) // NOLINT(bugprone-empty-catch)
+                    {
+                    }
                 }
 
                 if (!ptr->continuation) [[likely]]
