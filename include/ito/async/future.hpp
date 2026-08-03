@@ -197,6 +197,7 @@ namespace ito::async
         void set_result(T&& v) { this->set_result_impl(std::move(v)); }
 
         using details::promise_base<T>::set_exception;
+        using details::promise_base<T>::is_ready;
 
     private:
         explicit promise(ito::details::utils::trackable<details::future_state<T>>::weak_view&& value)
@@ -218,6 +219,7 @@ namespace ito::async
         void set_result() { this->set_result_impl(); }
 
         using details::promise_base<void>::set_exception;
+        using details::promise_base<void>::is_ready;
 
     private:
         explicit promise(ito::details::utils::trackable<details::future_state<void>>::weak_view&& value)

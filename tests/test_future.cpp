@@ -29,6 +29,7 @@ TEST_CASE("future basics")
     SECTION("future never resolved: awaiting coroutine is left suspended forever")
     {
         auto [promise, res] = ito::async::promise<int>::create();
+        REQUIRE_FALSE(promise.is_ready());
         REQUIRE_THROWS_AS(
             loop.run_until_complete([&]() -> ito::coro<int> {
                 co_return co_await std::move(res);
@@ -70,6 +71,7 @@ TEST_CASE("future basics")
         const auto res = loop.run_until_complete([&]() -> ito::coro<int> {
             auto [promise, fut] = ito::async::promise<int>::create();
             promise.set_exception(std::make_exception_ptr(custom_error{"custom error"}));
+            REQUIRE(promise.is_ready());
             REQUIRE_THROWS_AS(co_await std::move(fut), custom_error);
             co_return 2;
         }());
@@ -100,8 +102,10 @@ TEST_CASE("future basics")
             loop.call_soon([&]() {
                 mock.call(1);
 
+                REQUIRE_FALSE(promise.is_ready());
                 loop.call_soon([&]() { mock.call(3); });
                 promise.set_result(value);
+                REQUIRE(promise.is_ready());
                 loop.call_soon([&]() { mock.call(4); });
             });
             loop.call_soon([&]() { mock.call(2); });
@@ -120,6 +124,7 @@ TEST_CASE("future basics")
     {
         auto [promise, fut] = ito::async::promise<int>::create();
         promise.set_result(10);
+        REQUIRE(promise.is_ready());
         REQUIRE_THROWS_AS(promise.set_result(20), ito::exceptions::value_is_set);
         REQUIRE_THROWS_AS(promise.set_exception({}), ito::exceptions::value_is_set);
     }
@@ -130,6 +135,48 @@ TEST_CASE("future basics")
             promise.set_result();
             co_await std::move(res);
         }());
+    }
+
+    SECTION("promise reports is_ready before and after set_result")
+    {
+        auto [promise, fut] = ito::async::promise<int>::create();
+        REQUIRE_FALSE(promise.is_ready());
+        promise.set_result(5);
+        REQUIRE(promise.is_ready());
+    }
+
+    SECTION("destroy promise after resolving it, before the future is ever awaited")
+    {
+        // regression test: the promise used to be the sole owner of the shared state, so
+        // dropping it here (before anyone awaited `fut`) tore the state down and turned an
+        // already-delivered value into a spurious broken_future
+        auto make_future = [] {
+            auto [promise, fut] = ito::async::promise<int>::create();
+            promise.set_result(42);
+            return std::move(fut);
+        };
+
+        const auto res = loop.run_until_complete([&]() -> ito::coro<int> {
+            co_return co_await make_future();
+        }());
+
+        REQUIRE(res == 42);
+    }
+
+    SECTION("destroy promise before ever resolving it, and before the future is awaited")
+    {
+        auto make_future = [] {
+            auto [promise, fut] = ito::async::promise<int>::create();
+            return std::move(fut);
+            // promise destroyed here, having never called set_result()/set_exception()
+        };
+
+        REQUIRE_THROWS_AS(
+            loop.run_until_complete([&]() -> ito::coro<int> {
+                co_return co_await make_future();
+            }()),
+            ito::exceptions::broken_future
+        );
     }
 
     SECTION("destroy promise while a task is still suspended awaiting its future -> broken_future")
@@ -156,6 +203,7 @@ TEST_CASE("future basics")
             // drop `promise` while `task` is still suspended awaiting its `future`: the
             // shared state must stay alive long enough to deliver `broken_future` to `task`,
             // not just quietly leave it suspended forever
+            REQUIRE_FALSE(promise.is_ready());
             {
                 auto discard = std::move(promise);
             }
