@@ -12,6 +12,31 @@ namespace ito::details::utils
     {
     };
 
+    // The failure paths live in their own functions: constructing and throwing the exception is most of
+    // the code of the accessors below, and having it there is what keeps those accessors from being
+    // inlined into their callers, even though it only ever runs when something went wrong.
+    [[noreturn]] inline void throw_empty_value()
+    {
+        throw ito::exceptions::empty_value{"empty value"};
+    }
+
+    [[noreturn]] inline void throw_value_is_set()
+    {
+        throw ito::exceptions::value_is_set{"value is already set"};
+    }
+
+    // Reports why a result could not be handed out: rethrows the stored exception, or reports the
+    // still-empty state (which is also how a valueless_by_exception state is reported, consistently
+    // with error_or_optional_base::is_ready()).
+    template<typename Storage>
+    [[noreturn]] void rethrow_or_throw_empty(const Storage& value)
+    {
+        if (const auto err = std::get_if<2>(&value))
+            std::rethrow_exception(*err);
+
+        throw_empty_value();
+    }
+
     template<typename T>
     class error_or_optional_base
     {
@@ -40,21 +65,19 @@ namespace ito::details::utils
         // TODO: clear state
         T&& get_result_impl()
         {
-            return std::visit(
-                ito::details::utils::overloaded{
-                    [](const std::monostate&) -> T&& { throw ito::exceptions::empty_value{"empty value"}; },
-                    [](T&& v) -> T&& { return std::move(v); },
-                    [](const std::exception_ptr& e) -> T&& { std::rethrow_exception(e); }
-                },
-                std::move(m_value)
-            );
+            // Deliberately not std::visit(): visiting dispatches through a function table, which neither
+            // compiler manages to fold away, while this is the hot path of every awaited future.
+            if (const auto value = std::get_if<1>(&m_value)) [[likely]]
+                return std::move(*value);
+
+            rethrow_or_throw_empty(m_value);
         };
 
     private:
         void ensure_not_set()
         {
             if (is_ready()) [[unlikely]]
-                throw ito::exceptions::value_is_set{"value is already set"};
+                throw_value_is_set();
         }
 
     private:

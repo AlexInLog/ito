@@ -27,29 +27,24 @@ namespace ito::async
             ito::details::utils::coroutine_handle<>   continuation{};
         };
 
+        // Kept in its own function so that the awaitable steps below stay small enough to be inlined
+        // into the awaiting coroutine: constructing and throwing the exception is most of their code,
+        // while it only ever runs when the promise is already gone.
+        [[noreturn]] inline void throw_broken_future()
+        {
+            throw ito::exceptions::broken_future{"no associated future state"};
+        }
+
         template<typename T = void>
         class promise_base
         {
         public:
             ~promise_base() noexcept
             {
-                if (m_value->continuation) [[unlikely]]
-                {
-                    if (const auto loop = ito::loop::try_current()) [[likely]]
-                    {
-                        // call_soon() can throw (e.g. std::bad_alloc from the queue); swallow it
-                        // rather than let it escape this noexcept destructor and terminate()
-                        try
-                        {
-                            loop->call_soon(std::move(m_value->continuation).detach());
-                        }
-                        catch (...) // NOLINT(bugprone-empty-catch) 
-                        {
-                            // deliberately empty: this destructor must stay noexcept, and there is
-                            // nothing sensible to do with a failed best-effort notification here
-                        }
-                    }
-                }
+                if (!m_value->continuation) [[likely]]
+                    return;
+
+                notify_broken_future();
             }
 
             // The move constructor is intentionally left defaulted: all state that the destructor
@@ -57,7 +52,7 @@ namespace ito::async
             // own move constructor already re-points the associated `weak_view`/clears the source
             // correctly. There is nothing left for this class to additionally manage on move.
             promise_base(const promise_base&)            = delete;
-            promise_base(promise_base&&) noexcept        = default; 
+            promise_base(promise_base&&) noexcept        = default;
             promise_base& operator=(const promise_base&) = delete;
             promise_base& operator=(promise_base&&)      = delete;
 
@@ -79,12 +74,32 @@ namespace ito::async
             [[nodiscard]] bool is_ready() const { return m_value->value.is_ready(); }
 
         protected:
-            explicit promise_base(ito::details::utils::trackable<details::future_state<T>> value)
+            explicit promise_base(ito::details::utils::trackable<details::future_state<T>>&& value)
                 : m_value{std::move(value)}
             {
             }
 
         private:
+            // The broken-future notification is kept out of ~promise_base(): it only runs when the
+            // promise dies with a coroutine still waiting on it, and inlining it (call_soon() plus the
+            // try/catch) is what stops the destructor itself from being inlined into its caller.
+            void notify_broken_future() noexcept
+            {
+                if (const auto loop = ito::loop::try_current()) [[likely]]
+                {
+                    // call_soon() can throw (e.g. std::bad_alloc from the queue); swallow it
+                    // rather than let it escape this noexcept destructor and terminate()
+                    try
+                    {
+                        loop->call_soon(std::move(m_value->continuation).detach());
+                    }
+                    catch (...) // NOLINT(bugprone-empty-catch)
+                    {
+                        // deliberately empty: this destructor must stay noexcept, and there is
+                        // nothing sensible to do with a failed best-effort notification here
+                    }
+                }
+            }
             [[nodiscard]] auto prepare_scheduling_continuation()
             {
                 // we are doing it as lambda to try to catch loop BEFORE actual value changes so crash would happen BEFORE
@@ -142,7 +157,7 @@ namespace ito::async
                     if (const auto ptr = view.get()) [[likely]]
                         ptr->continuation = ito::details::utils::coroutine_handle<>{h};
                     else
-                        throw ito::exceptions::broken_future{"no associated future state"};
+                        details::throw_broken_future();
                 }
 
                 T await_resume()
@@ -150,14 +165,14 @@ namespace ito::async
                     if (const auto ptr = view.get()) [[likely]]
                         return ptr->value.get_result();
 
-                    throw ito::exceptions::broken_future{"no associated future state"};
+                    details::throw_broken_future();
                 }
             };
             return awaitable{std::move(m_view)};
         }
 
     private:
-        explicit future(ito::details::utils::trackable<details::future_state<T>>::weak_view view)
+        explicit future(ito::details::utils::trackable<details::future_state<T>>::weak_view&& view)
             : m_view{std::move(view)}
         {
         }
