@@ -95,7 +95,7 @@ namespace ito::async
             // The broken-future notification is kept out of ~promise_base(): it only runs when the
             // promise dies with a coroutine still waiting on it, and inlining it (call_soon() plus the
             // try/catch) is what stops the destructor itself from being inlined into its caller.
-            void notify_broken_future(details::future_state<T>* ptr) noexcept
+            static void notify_broken_future(details::future_state<T>* ptr) noexcept
             {
                 if (!ptr->value.is_ready()) [[unlikely]]
                 {
