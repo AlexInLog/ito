@@ -17,6 +17,11 @@ namespace ito
         {
         };
 
+        [[noreturn]] inline void throw_empty_coro()
+        {
+            throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to co_await coro"};
+        }
+
         struct base_promise_type
         {
             std::coroutine_handle<> continuation = std::noop_coroutine();
@@ -75,11 +80,6 @@ namespace ito
 
         auto operator co_await() &&
         {
-            if (!m_h)
-            {
-                throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to co_await coro"};
-            }
-
             struct awaitable
             {
                 details::utils::raii_coroutine_handle<promise_type> _h;
@@ -92,7 +92,11 @@ namespace ito
                 }
                 T await_resume() { return _h->get_result(); }
             };
-            return awaitable{std::move(m_h)};
+
+            if (m_h) [[likely]]
+                return awaitable{std::move(m_h)};
+
+            details::throw_empty_coro();
         }
 
     private:
@@ -103,12 +107,10 @@ namespace ito
 
         details::utils::raii_coroutine_handle<promise_type> detach() &&
         {
-            if (!m_h)
-            {
-                throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to detach coro"};
-            }
+            if (m_h) [[likely]]
+                return std::move(m_h);
 
-            return std::move(m_h);
+            details::throw_empty_coro();
         }
 
     private:

@@ -32,11 +32,6 @@ namespace ito
 
         auto operator co_await() &&
         {
-            if (!m_h.get())
-            {
-                throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to co_await task"};
-            }
-
             struct awaitable
             {
                 handle_type _h;
@@ -53,7 +48,11 @@ namespace ito
 
                 T await_resume() { return cast().promise().get_result(); }
             };
-            return awaitable{std::move(m_h)};
+
+            if (m_h.get()) [[likely]]
+                return awaitable{std::move(m_h)};
+
+            details::throw_empty_coro();
         }
 
     private:

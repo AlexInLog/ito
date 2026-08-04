@@ -83,9 +83,9 @@ static void bm_resolve_future_before_await(benchmark::State& state)
     for (auto _ : state)
     {
         benchmark::DoNotOptimize(loop.run_until_complete([]() -> ito::coro<int> {
-            ito::async::future<int> f{};
-            f.set_result(10);
-            co_return co_await f;
+            auto [promise, f] = ito::async::promise<int>::create();
+            promise.set_result(10);
+            co_return co_await std::move(f);
         }()));
     }
 }
@@ -97,9 +97,9 @@ static void bm_resolve_future_inside_signal(benchmark::State& state)
     for (auto _ : state)
     {
         benchmark::DoNotOptimize(loop.run_until_complete([&loop]() -> ito::coro<int> {
-            ito::async::future<int> f{};
-            loop.call_soon([&]() { f.set_result(10); });
-            co_return co_await f;
+            auto [promise, f] = ito::async::promise<int>::create();
+            loop.call_soon([&]() { promise.set_result(10); });
+            co_return co_await std::move(f);
         }()));
     }
 }

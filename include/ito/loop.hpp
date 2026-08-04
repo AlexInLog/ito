@@ -92,18 +92,26 @@ namespace ito
 {
     class loop
     {
+        [[noreturn]] static inline void throw_loop_already_running()
+        {
+            throw exceptions::invalid_loop_state{"loop::run_until_complete() called from within an already-running loop on this thread"};
+        }
+
+        [[noreturn]] static inline void throw_no_active_loop()
+        {
+            throw exceptions::invalid_loop_state{"no loop is currently running on this thread"};
+        }
+
+
         auto lock()
         {
             auto& current_loop_ptr = current_impl();
-            if (current_loop_ptr)
+            if (!current_loop_ptr) [[likely]]
             {
-                throw exceptions::invalid_loop_state{
-                    "loop::run_until_complete() called from within an already-running loop on this thread"
-                };
+                current_loop_ptr = this;
+                return details::utils::finally{[]() noexcept { current_impl() = nullptr; }};
             }
-
-            current_loop_ptr = this;
-            return details::utils::finally{[]() noexcept { current_impl() = nullptr; }};
+            throw_loop_already_running();
         }
 
         static loop*& current_impl()
@@ -200,10 +208,10 @@ namespace ito
         static loop& current()
         {
             const auto l = try_current();
-            if (!l) [[unlikely]]
-                throw exceptions::invalid_loop_state{"no loop is currently running on this thread"};
+            if (l) [[likely]]
+                return *l;
 
-            return *l;
+            throw_no_active_loop();
         }
         static loop* try_current() noexcept { return current_impl(); }
 

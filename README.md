@@ -19,7 +19,9 @@ What exists right now:
 - `ito::loop` — runs the coroutines and tasks scheduled onto it.
 - Exception propagation from the coroutine body to the caller via `ito::exceptions::*`.
 - Chaining: a `coro<T>` can `co_await` another `coro<U>`.
-- `ito::async::future<T>` — async version of the future primitive, `co_await`-able until its result is ready.
+- `ito::async::promise<T>`/`ito::async::future<T>` — `std::promise`/`std::future`-style split: `promise<T>::create()`
+  returns a connected pair, `promise<T>` is the write side (`set_result`/`set_exception`), `future<T>` is the
+  single-consumption, `co_await`-able read side.
 - `ito::task<T>` — created via `loop.create_task(coro)`, starts running independently of when (or whether) it's
   `co_await`ed; destroying it before it's awaited cancels it (only cancel-before-it-starts is supported, not
   cancellation of an already-running coroutine).

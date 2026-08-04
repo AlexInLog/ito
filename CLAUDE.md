@@ -36,15 +36,21 @@ Repo: https://github.com/AlexInLog/ito
   - `include/ito/async/` — async primitives (currently `future.hpp`).
 - Namespaces:
   - `ito` — public API (`coro<T>`, `loop`, `task<T>`).
-  - `ito::async` — async primitives layered on top of `coro<T>`, e.g. `future<T>` (awaitable, settable from outside a coroutine).
+  - `ito::async` — async primitives layered on top of `coro<T>`, e.g. `promise<T>`/`future<T>` (settable from outside
+    a coroutine / awaitable).
   - `ito::details`, `ito::details::utils` — implementation internals, mirroring `include/ito/details/utils/`.
-  - `ito::exceptions` — exception types thrown across the library (e.g. `future_just_awaited`).
+  - `ito::exceptions` — exception types thrown across the library (e.g. `broken_future`).
 
 ## Core components
 
 - `coro<T>` — the base coroutine type: lazily-started, single-owner (`initial_suspend` = always suspend).
-- `future<T>` — uses CRTP-based `set_value` specialization to handle `void` vs non-`void` results without duplicating
-  the interface.
+- `promise<T>`/`future<T>` — `std::promise`/`std::future`-style split, created together via `promise<T>::create()`.
+  Both sides are backed by a shared `trackable<future_state<T>>`/`weak_view` pair (see
+  `details::utils::trackable`), so either side can be destroyed independently without dangling the other:
+  destroying the `future` while a coroutine hasn't yet awaited it is a no-op; destroying the `promise` while a
+  coroutine is suspended `co_await`ing its `future` delivers `exceptions::broken_future` to that coroutine instead
+  of leaving it suspended forever. `future<T>::operator co_await() &&` is rvalue-qualified, so single-consumption is
+  enforced by the type system (move-only) rather than a runtime flag.
 - `task<T>` — created via `loop::create_task(coro<T>&&)`; the loop schedules it to start running on the next
   `call_soon` tick, independent of whether/when it's `co_await`ed. Destroying the `task<T>` before it's awaited
   cancels it (the underlying coroutine handle is destroyed, so the body may never run past its next suspend point).
@@ -62,6 +68,12 @@ Repo: https://github.com/AlexInLog/ito
 - Coverage tooling (llvm-cov + SonarQube) has known false positives on branch merging for template instantiations —
   this is an upstream LLVM issue (llvm/llvm-project#93843, #111743, #119299), not a bug in this codebase. Don't "fix"
   coverage gaps that trace back to this.
+- `promise<T>`'s destructor schedules a resume via `loop::try_current()` (not `loop::current()`) specifically because
+  it must stay `noexcept`-safe — if you touch that destructor, don't switch it back to the throwing lookup.
+  Double-scheduling a resume (UB) is guarded by `future_state<T>::continuation`'s own move/`detach()` semantics
+  clearing it the instant a resume is scheduled, not by checking `is_ready()` — if you change how `continuation` is
+  consumed, make sure whatever claims it still clears it in the same step, or a promise resolved and destroyed in
+  quick succession will double-schedule its awaiter's resume.
 
 ## CI
 
@@ -83,7 +95,7 @@ Repo: https://github.com/AlexInLog/ito
 - Include ordering is enforced by clang-format (`IncludeBlocks: Regroup`): quoted includes first, then
   `<doctest|nanobench>`, then other extension-bearing angle includes, then plain system headers
   (`SortIncludes: CaseSensitive`).
-- Member variables use an `m_` prefix; types and functions are `snake_case` (see `future_base`, `set_result_impl`).
+- Member variables use an `m_` prefix; types and functions are `snake_case` (see `promise_base`, `set_result_impl`).
 
 ## Working with me on this project
 

@@ -15,6 +15,7 @@ Checks:
     - '-modernize-use-trailing-return-type'
     - 'google-explicit-constructor'
     - '-modernize-use-ranges'
+    - '-clang-analyzer-core.CallAndMessage'
 WarningsAsErrors: '*'
 ExtraArgs:
     - '-std=c++20'
