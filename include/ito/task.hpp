@@ -11,7 +11,7 @@ namespace ito
     class loop;
 
     template<typename T>
-    class [[nodiscard("ito::task can't be discarded")]] task
+    class [[nodiscard("ito::task can't be discarded")]] task final
     {
     private:
         using handle_type = details::utils::trackable<details::utils::raii_coroutine_handle<>>;

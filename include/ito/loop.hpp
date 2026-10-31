@@ -102,7 +102,6 @@ namespace ito
             throw exceptions::invalid_loop_state{"no loop is currently running on this thread"};
         }
 
-
         auto lock()
         {
             auto& current_loop_ptr = current_impl();

@@ -68,12 +68,12 @@ namespace ito
     } // namespace details
 
     template<typename T = void>
-    class [[nodiscard("ito::coro object can't be discarded")]] coro
+    class [[nodiscard("ito::coro object can't be discarded")]] coro final
     {
     public:
         friend class ito::loop;
 
-        struct promise_type : public details::promise_type<T>
+        struct promise_type final : public details::promise_type<T>
         {
             coro get_return_object() { return coro{std::coroutine_handle<promise_type>::from_promise(*this)}; }
         };

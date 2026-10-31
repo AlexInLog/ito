@@ -78,8 +78,8 @@ else()
     )
 
 endif()
-if(ITO_ENABLE_ASAN)
 
+if(ITO_ENABLE_ASAN)
     target_compile_options(ito_project_options INTERFACE
         -fsanitize=address
         -fno-omit-frame-pointer
@@ -94,8 +94,8 @@ if(ITO_ENABLE_ASAN)
     )
 
 endif()
-if(ITO_ENABLE_TSAN)
 
+if(ITO_ENABLE_TSAN)
     target_compile_options(ito_project_options INTERFACE
         -fsanitize=thread
         -g
@@ -107,8 +107,8 @@ if(ITO_ENABLE_TSAN)
     )
 
 endif()
-if(ITO_ENABLE_UBSAN)
 
+if(ITO_ENABLE_UBSAN)
     target_compile_options(ito_project_options INTERFACE
         -fsanitize=undefined
         -fno-sanitize-recover=undefined
@@ -119,8 +119,8 @@ if(ITO_ENABLE_UBSAN)
     )
 
 endif()
-if(ITO_ENABLE_LSAN)
 
+if(ITO_ENABLE_LSAN)
     target_compile_options(ito_project_options INTERFACE
         -fsanitize=leak
         -g
@@ -132,8 +132,8 @@ if(ITO_ENABLE_LSAN)
     )
 
 endif()
-if(ITO_ENABLE_COVERAGE)
 
+if(ITO_ENABLE_COVERAGE)
     target_compile_options(ito_project_options INTERFACE
         -O0
         -g
