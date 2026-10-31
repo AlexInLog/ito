@@ -86,6 +86,17 @@ namespace ito::details
             return std::move(m_entries.back().view);
         }
 
+        // Only the earliest entries matter for how long the loop may sleep, so cancelled ones deeper in the
+        // heap are left in place until they surface here.
+        void drop_cancelled_earliest()
+        {
+            while (!m_entries.empty() && !m_entries.front().view.get())
+            {
+                std::pop_heap(m_entries.begin(), m_entries.end(), later);
+                m_entries.pop_back();
+            }
+        }
+
     private:
         std::vector<entry> m_entries{};
     };
@@ -254,13 +265,20 @@ namespace ito
 
                     if (m_queue.empty())
                     {
-                        std::this_thread::sleep_until(m_timers.next_deadline());
+                        m_timers.drop_cancelled_earliest();
+                        if (!m_timers.empty())
+                            std::this_thread::sleep_until(m_timers.next_deadline());
                         continue;
                     }
                 }
 
-                const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
-                std::visit(details::loop_entry_executor{}, m_queue.front());
+                // Runs only the entries ready when this tick started (including the timers just moved in);
+                // anything they schedule waits for the next tick, so timers are checked once per tick.
+                for (auto n = m_queue.size(); n > 0 && !h.done(); --n)
+                {
+                    const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
+                    std::visit(details::loop_entry_executor{}, m_queue.front());
+                }
             }
         }
 

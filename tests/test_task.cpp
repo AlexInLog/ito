@@ -145,4 +145,38 @@ TEST_CASE("base task logic")
         // fire, since nothing set up a REQUIRE_CALL for it)
         REQUIRE_NOTHROW(promise.set_result(42));
     }
+    SECTION("resolve the future a task is suspended on, then destroy the task before its resume runs")
+    {
+        auto [promise, f] = ito::async::promise<int>::create();
+
+        auto inner = [&]() -> ito::coro<int> {
+            mock.call(-1);
+            const int v = co_await std::move(f);
+            mock.call(v);
+            co_return v + 1;
+        };
+
+        std::optional<ito::task<int>> task{};
+
+        l.run_until_complete([&]() -> ito::coro<void> {
+            task.emplace(l.create_task(inner()));
+
+            auto [tick_promise, tick] = ito::async::promise<>::create();
+            l.call_soon([&]() noexcept { tick_promise.set_result(); });
+            {
+                REQUIRE_CALL(mock, call(-1));
+                co_await std::move(tick);
+            }
+
+            // schedules `task`'s resume on the loop, then cancels `task` before that resume runs:
+            // the scheduled resume must notice the coroutine is gone instead of resuming freed state
+            promise.set_result(42);
+            task.reset();
+
+            auto [drain_promise, drain] = ito::async::promise<>::create();
+            l.call_soon([&]() noexcept { drain_promise.set_result(); });
+            co_await std::move(drain);
+            co_return;
+        }());
+    }
 }

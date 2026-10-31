@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ito/details/utils/coroutine_handle.hpp>
 #include <ito/details/utils/error_or_optional.hpp>
 #include <ito/details/utils/trackable.hpp>
 #include <ito/fwd.hpp>
@@ -8,6 +7,7 @@
 
 #include <coroutine>
 #include <exception>
+#include <optional>
 #include <utility>
 
 namespace ito::exceptions
@@ -26,7 +26,12 @@ namespace ito::async
         struct future_state
         {
             ito::details::utils::error_or_optional<T> value{};
-            ito::details::utils::coroutine_handle<>   continuation{};
+            // Viewing the awaiting coroutine's handle (owned by the awaitable inside its frame) rather than
+            // holding it raw: once scheduled, the loop skips the resume if that frame was destroyed meanwhile.
+            std::optional<ito::details::utils::trackable<std::coroutine_handle<>>::weak_view> continuation{};
+
+            // Clears `continuation` in the same step it's claimed, so it can never be scheduled twice.
+            [[nodiscard]] auto take_continuation() noexcept { return std::exchange(continuation, std::nullopt); }
         };
 
         // Kept in its own function so that the awaitable steps below stay small enough to be inlined
@@ -80,7 +85,9 @@ namespace ito::async
                 }
             }
 
-            [[nodiscard]] bool is_ready() const
+            // True once there's nothing left for this promise to deliver: a result/exception was set, or the
+            // future side is already gone (in which case whether anything was ever set is no longer known).
+            [[nodiscard]] bool is_settled() const
             {
                 const auto ptr = m_value.get();
                 return !ptr || ptr->value.is_ready();
@@ -124,7 +131,8 @@ namespace ito::async
                     // rather than let it escape this noexcept destructor and terminate()
                     try
                     {
-                        loop->call_soon(std::move(ptr->continuation).detach());
+                        if (auto continuation = ptr->take_continuation())
+                            loop->call_soon(std::move(*continuation));
                     }
                     catch (...) // NOLINT(bugprone-empty-catch)
                     {
@@ -138,8 +146,10 @@ namespace ito::async
                 // we are doing it as lambda to try to catch loop BEFORE actual value changes so crash would happen BEFORE
                 const auto ptr = m_value.get();
                 return [loop = ptr && ptr->continuation ? &ito::loop::current() : nullptr, ptr]() {
-                    if (loop)
-                        loop->call_soon(std::move(ptr->continuation).detach());
+                    if (!loop)
+                        return;
+                    if (auto continuation = ptr->take_continuation())
+                        loop->call_soon(std::move(*continuation));
                 };
             }
 
@@ -158,14 +168,15 @@ namespace ito::async
         {
             struct awaitable
             {
-                ito::details::utils::trackable<details::future_state<T>> obj;
+                ito::details::utils::trackable<details::future_state<T>>               obj;
+                std::optional<ito::details::utils::trackable<std::coroutine_handle<>>> handle{};
 
                 explicit awaitable(ito::details::utils::trackable<details::future_state<T>>&& obj)
                     : obj{std::move(obj)}
                 {
                 }
 
-                ~awaitable() noexcept { obj->continuation = ito::details::utils::coroutine_handle<>{}; }
+                ~awaitable() noexcept { obj->continuation.reset(); }
 
                 awaitable(const awaitable&)            = delete;
                 awaitable& operator=(const awaitable&) = delete;
@@ -175,7 +186,12 @@ namespace ito::async
 
                 constexpr bool await_ready() noexcept { return obj->value.is_ready(); }
 
-                auto await_suspend(std::coroutine_handle<> h) noexcept { obj->continuation = ito::details::utils::coroutine_handle<>{h}; }
+                auto await_suspend(std::coroutine_handle<> h) noexcept
+                {
+                    auto [handle_obj, view] = ito::details::utils::trackable<std::coroutine_handle<>>::create(h);
+                    handle.emplace(std::move(handle_obj));
+                    obj->continuation.emplace(std::move(view));
+                }
 
                 T await_resume() { return obj->value.get_result(); }
             };
@@ -205,7 +221,7 @@ namespace ito::async
         void set_result(T&& v) { this->set_result_impl(std::move(v)); }
 
         using details::promise_base<T>::set_exception;
-        using details::promise_base<T>::is_ready;
+        using details::promise_base<T>::is_settled;
 
     private:
         explicit promise(ito::details::utils::trackable<details::future_state<T>>::weak_view&& value)
@@ -227,7 +243,7 @@ namespace ito::async
         void set_result() { this->set_result_impl(); }
 
         using details::promise_base<void>::set_exception;
-        using details::promise_base<void>::is_ready;
+        using details::promise_base<void>::is_settled;
 
     private:
         explicit promise(ito::details::utils::trackable<details::future_state<void>>::weak_view&& value)

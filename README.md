@@ -23,12 +23,24 @@ What exists right now:
   returns a connected pair, `promise<T>` is the write side (`set_result`/`set_exception`), `future<T>` is the
   single-consumption, `co_await`-able read side.
 - `ito::task<T>` — created via `loop.create_task(coro)`, starts running independently of when (or whether) it's
-  `co_await`ed; destroying it before it's awaited cancels it (only cancel-before-it-starts is supported, not
-  cancellation of an already-running coroutine).
+  `co_await`ed; destroying it before it's awaited cancels it. A task that hasn't started never runs; a task suspended
+  on a `future` or a sleep has its coroutine frame destroyed at that suspension point, so locals are destroyed but
+  nothing after the `co_await` runs. There's no cooperative cancellation signal yet, so the task can't observe or
+  react to being cancelled.
 - `ito::async::sleep_for`/`ito::async::sleep_until` — suspend a coroutine until a duration elapses or a
   `steady_clock` deadline is reached, backed by a timer queue on `ito::loop`.
 
 What's *not* here yet (see [Roadmap](#roadmap)): multi-threading, work-stealing, I/O, cooperative cancellation.
+
+### Scheduling order
+
+- `ito::loop` runs in ticks. At the start of a tick it moves every timer whose deadline has passed onto the ready
+  queue, then runs exactly the entries that were queued at that point. Anything scheduled while the tick runs
+  (`call_soon`, `create_task`, resumes) waits for the next tick, in FIFO order.
+- When a `coro<T>` or `task<T>` finishes, the coroutine awaiting it resumes right away, without a trip through the
+  queue.
+- Resolving or destroying a `promise<T>` never resumes the coroutine awaiting its `future<T>` inside that call: the
+  resume is queued behind whatever is already scheduled.
 
 ### Example
 

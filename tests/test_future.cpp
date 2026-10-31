@@ -29,7 +29,7 @@ TEST_CASE("future basics")
     SECTION("future never resolved: awaiting coroutine is left suspended forever")
     {
         auto [promise, res] = ito::async::promise<int>::create();
-        REQUIRE_FALSE(promise.is_ready());
+        REQUIRE_FALSE(promise.is_settled());
         REQUIRE_THROWS_AS(
             loop.run_until_complete([&]() -> ito::coro<int> {
                 co_return co_await std::move(res);
@@ -71,7 +71,7 @@ TEST_CASE("future basics")
         const auto res = loop.run_until_complete([&]() -> ito::coro<int> {
             auto [promise, fut] = ito::async::promise<int>::create();
             promise.set_exception(std::make_exception_ptr(custom_error{"custom error"}));
-            REQUIRE(promise.is_ready());
+            REQUIRE(promise.is_settled());
             REQUIRE_THROWS_AS(co_await std::move(fut), custom_error);
             co_return 2;
         }());
@@ -102,10 +102,10 @@ TEST_CASE("future basics")
             loop.call_soon([&]() noexcept {
                 mock.call(1);
 
-                REQUIRE_FALSE(promise.is_ready());
+                REQUIRE_FALSE(promise.is_settled());
                 loop.call_soon([&]() noexcept { mock.call(3); });
                 promise.set_result(value);
-                REQUIRE(promise.is_ready());
+                REQUIRE(promise.is_settled());
                 loop.call_soon([&]() noexcept { mock.call(4); });
             });
             loop.call_soon([&]() noexcept { mock.call(2); });
@@ -124,7 +124,7 @@ TEST_CASE("future basics")
     {
         auto [promise, fut] = ito::async::promise<int>::create();
         promise.set_result(10);
-        REQUIRE(promise.is_ready());
+        REQUIRE(promise.is_settled());
         REQUIRE_THROWS_AS(promise.set_result(20), ito::exceptions::value_is_set);
         REQUIRE_THROWS_AS(promise.set_exception({}), ito::exceptions::value_is_set);
     }
@@ -137,12 +137,20 @@ TEST_CASE("future basics")
         }());
     }
 
-    SECTION("promise reports is_ready before and after set_result")
+    SECTION("promise reports is_settled before and after set_result")
     {
         auto [promise, fut] = ito::async::promise<int>::create();
-        REQUIRE_FALSE(promise.is_ready());
+        REQUIRE_FALSE(promise.is_settled());
         promise.set_result(5);
-        REQUIRE(promise.is_ready());
+        REQUIRE(promise.is_settled());
+    }
+    SECTION("promise reports is_settled once its future is gone, even if nothing was ever set")
+    {
+        auto [promise, fut] = ito::async::promise<int>::create();
+        {
+            [[maybe_unused]] const auto dropped = std::move(fut);
+        }
+        REQUIRE(promise.is_settled());
     }
 
     SECTION("destroy promise after resolving it, before the future is ever awaited")
@@ -203,7 +211,7 @@ TEST_CASE("future basics")
             // drop `promise` while `task` is still suspended awaiting its `future`: the
             // shared state must stay alive long enough to deliver `broken_future` to `task`,
             // not just quietly leave it suspended forever
-            REQUIRE_FALSE(promise.is_ready());
+            REQUIRE_FALSE(promise.is_settled());
             {
                 auto discard = std::move(promise);
             }
