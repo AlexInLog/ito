@@ -7,11 +7,11 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
 ## Open issues
 
 - **`future<T>` await cost:** making future continuations cancellation-aware (the awaitable owns a
-  `trackable<std::coroutine_handle<>>`, the queue gets its `weak_view`) costs about 3 ns on the path that never
-  suspends (`bm_resolve_future_before_await`, 11.9 to 15.0 ns), which it shouldn't, and under 1 ns on the
-  suspending path (`bm_resolve_future_inside_signal`). The cause isn't known yet. One guess: the awaitable and
-  `future_state` are no longer trivially destructible, which changes the cleanup path or what gets inlined.
-  Defaulting `~awaitable()` made no difference. Next step is reading the codegen.
+  `trackable<std::coroutine_handle<>>`, the queue gets its `weak_view`) added about 3 ns on the path that never
+  suspends (`bm_resolve_future_before_await`, 11.9 to 15.0 ns). Replacing `take_continuation()`, which returned the
+  view through a temporary `std::optional`, with `schedule_continuation()`, which moves it straight into the queue,
+  brought it back to about 12.1 ns. The likely cause was that temporary's non-trivial destructor getting in the way of
+  inlining, but the codegen wasn't checked, so confirm the recovery in CodSpeed before closing this.
 - **Cancelled timers deeper in the heap:** the loop drops cancelled entries from the top of the timer heap before
   it sleeps, so it never waits on a dead deadline. Entries further down keep their memory until they surface.
   Removing them on cancel needs each sleep to know its heap position, which an intrusive timer node would give
@@ -29,16 +29,11 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
   is a documented contract rather than a check. Callbacks are stored as `move_only_callback`, so the safe form
   (owning what they touch, e.g. a promise captured by move) is always possible.
 - **Unobserved task exceptions are dropped silently:** a task that fails and is destroyed without being awaited
-  loses its exception. asyncio logs these; here there isn't even a debug hook.
-- **`bad_alloc` while resolving a promise loses its awaiter:** `promise_base::set_result_impl()`/`set_exception()`
-  publish the value first and queue the awaiter's resume afterwards, and `take_continuation()` has already moved the
-  view out of `future_state` by then. If that `call_soon()` throws, the view is destroyed with the exception, the
-  value stays set (so a retry only gets `value_is_set`), and the awaiting coroutine is never resumed. Called from a
-  `noexcept` callback this ends in `terminate()`; called from a coroutine, the awaiter hangs silently. Fixing it
-  means securing the queue slot before the value is published, while still clearing `continuation` in the same step
-  it's claimed (the double-scheduling invariant in `CLAUDE.md`). The timer transfer had the same shape and was fixed
-  by moving the view into the queue before popping it; `tests/test_allocation_failure.cpp` has the allocation hook a
-  test for this would need.
+  loses its exception. That's documented (README, `task.hpp`) and pinned by a test in `test_task.cpp`. asyncio logs
+  these; a loop-level handler called when a failed task is destroyed unawaited would be the equivalent here.
+- **`bad_alloc` in a promise's destructor can still lose its awaiter:** when resolving a promise fails to queue the
+  awaiter's resume, the awaiter stays registered and the promise's destructor queues it later. If that queuing fails
+  too, the destructor has to swallow the exception (it's `noexcept`) and nothing is left to resume the awaiter.
 - **Baseline benchmarks move with code layout:** `benchmark_baseline.cpp` links into the same binary as the ito
   benchmarks, so ito changes shift its unchanged code and CodSpeed reports regressions of up to about 20% on
   `bm_small_std_function`. Building the baselines as their own executable would pin their layout.

@@ -30,8 +30,16 @@ namespace ito::async
             // holding it raw: once scheduled, the loop skips the resume if that frame was destroyed meanwhile.
             std::optional<ito::details::utils::trackable<std::coroutine_handle<>>::weak_view> continuation{};
 
-            // Clears `continuation` in the same step it's claimed, so it can never be scheduled twice.
-            [[nodiscard]] auto take_continuation() noexcept { return std::exchange(continuation, std::nullopt); }
+            // Queues the awaiting coroutine's resume and clears `continuation` in the same step, so it can never be
+            // scheduled twice. call_soon() has no effect if it throws, so on failure `continuation` stays registered
+            // and a later attempt (the promise's destructor) can still deliver the result.
+            void schedule_continuation(ito::loop& loop)
+            {
+                if (!continuation) [[unlikely]]
+                    return;
+                loop.call_soon(std::move(*continuation));
+                continuation.reset();
+            }
         };
 
         // Kept in its own function so that the awaitable steps below stay small enough to be inlined
@@ -131,8 +139,7 @@ namespace ito::async
                     // rather than let it escape this noexcept destructor and terminate()
                     try
                     {
-                        if (auto continuation = ptr->take_continuation())
-                            loop->call_soon(std::move(*continuation));
+                        ptr->schedule_continuation(*loop);
                     }
                     catch (...) // NOLINT(bugprone-empty-catch)
                     {
@@ -146,10 +153,8 @@ namespace ito::async
                 // we are doing it as lambda to try to catch loop BEFORE actual value changes so crash would happen BEFORE
                 const auto ptr = m_value.get();
                 return [loop = ptr && ptr->continuation ? &ito::loop::current() : nullptr, ptr]() {
-                    if (!loop)
-                        return;
-                    if (auto continuation = ptr->take_continuation())
-                        loop->call_soon(std::move(*continuation));
+                    if (loop) [[likely]]
+                        ptr->schedule_continuation(*loop);
                 };
             }
 

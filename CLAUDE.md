@@ -70,10 +70,11 @@ Repo: https://github.com/AlexInLog/ito
   coverage gaps that trace back to this.
 - `promise<T>`'s destructor schedules a resume via `loop::try_current()` (not `loop::current()`) specifically because
   it must stay `noexcept`-safe — if you touch that destructor, don't switch it back to the throwing lookup.
-  Double-scheduling a resume (UB) is guarded by `future_state<T>::take_continuation()` clearing `continuation` the
-  instant a resume is scheduled, not by checking `is_ready()` — if you change how `continuation` is consumed, make
+  Double-scheduling a resume (UB) is guarded by `future_state<T>::schedule_continuation()` clearing `continuation`
+  the instant a resume is scheduled, not by checking `is_ready()` — if you change how `continuation` is consumed, make
   sure whatever claims it still clears it in the same step, or a promise resolved and destroyed in quick succession
-  will double-schedule its awaiter's resume.
+  will double-schedule its awaiter's resume. It clears it only after `call_soon()` succeeded: if queuing throws, the
+  awaiter stays registered so the promise's destructor can still deliver the result, rather than being lost.
 - Every loop queue entry that resumes a coroutine which can be cancelled (task frames) must be a `weak_view`, not a
   raw `std::coroutine_handle<>`: destroying a `task<T>` destroys its frame at whatever suspend point it's at, and a
   raw handle queued before that would resume freed memory. `future<T>`'s awaitable and `sleep_awaitable` both own a
@@ -87,6 +88,14 @@ Repo: https://github.com/AlexInLog/ito
   so callbacks should own what they touch (e.g. capture a promise by move) rather than capture frame locals by `&`.
   `run_until_complete` still queues its coroutine as a `weak_view`, because allocation failure inside the loop can
   still unwind it.
+- Capturing coroutine lambdas: a lambda's captures live in its closure object, not in the coroutine frame, so a
+  temporary closure dies at the end of the statement that called it. `run_until_complete([&]() -> coro<> {...}())` is
+  safe, because the statement only ends after the run. `create_task([&]() -> coro<> {...}())` is not: the task runs
+  after the statement, and its body reads captures from a dead closure (ASan reports stack-use-after-return). Name the
+  lambda so it outlives the task, or pass what the body needs as coroutine parameters. clang-tidy's
+  `cppcoreguidelines-avoid-capturing-lambda-coroutines` is on for library code but off in `tests/.clang-tidy`: it
+  flags every capturing coroutine lambda, including the safe `run_until_complete` form most tests use, so tests rely
+  on ASan to catch the unsafe ones.
 
 ## CI
 
