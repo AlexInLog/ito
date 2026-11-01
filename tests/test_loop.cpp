@@ -3,13 +3,16 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/trompeloeil.hpp>
 #include <ito/async/future.hpp>
+#include <ito/async/sleep.hpp>
 #include <ito/coro.hpp>
 #include <ito/exceptions.hpp>
 #include <ito/loop.hpp>
+#include <ito/task.hpp>
 #include <trompeloeil/mock.hpp>
 #include <trompeloeil/sequence.hpp>
 
 #include <array>
+#include <chrono>
 #include <coroutine>
 #include <functional>
 #include <memory>
@@ -120,8 +123,9 @@ TEST_CASE("call_soon only accepts callbacks that can't throw")
     // callbacks are stored move-only, so they can own move-only state instead of referencing it
     STATIC_REQUIRE(call_soon_accepts<decltype([p = std::unique_ptr<int>{}]() noexcept {})>);
 
-    // coroutine handles are queued as-is: resuming one never throws, since its promise captures the body's exceptions
-    STATIC_REQUIRE(call_soon_accepts<std::coroutine_handle<>>);
+    // a raw coroutine handle is rejected: its frame could be destroyed while the resume is queued, so coroutine
+    // resumes are only queued through views that skip a destroyed frame
+    STATIC_REQUIRE_FALSE(call_soon_accepts<std::coroutine_handle<>>);
 }
 
 TEST_CASE("call_soon callbacks own what they capture")
@@ -204,5 +208,73 @@ TEST_CASE("call_soon callbacks own what they capture")
             REQUIRE(*token == 0);
             REQUIRE(token.use_count() == 1);
         }
+    }
+}
+
+TEST_CASE("scheduling order")
+{
+    ito::loop             loop{};
+    call_mock             mock{};
+    trompeloeil::sequence s{};
+
+    SECTION("a finished task resumes its awaiter inline, ahead of work the task scheduled")
+    {
+        auto child = [&]() -> ito::coro<int> {
+            loop.call_soon([&]() noexcept { mock.call(2); });
+            co_return 1;
+        };
+
+        REQUIRE_CALL(mock, call(1)).IN_SEQUENCE(s);
+        REQUIRE_CALL(mock, call(2)).IN_SEQUENCE(s);
+
+        loop.run_until_complete([&]() -> ito::coro<> {
+            auto task = loop.create_task(child());
+            mock.call(co_await std::move(task));
+
+            // give the callback queued by `child` a chance to run before this coroutine finishes
+            auto [tick_promise, tick] = ito::async::promise<>::create();
+            loop.call_soon([&]() noexcept { tick_promise.set_result(); });
+            co_await std::move(tick);
+        }());
+    }
+    SECTION("resolving a promise schedules its awaiter behind already-queued work, never inline")
+    {
+        REQUIRE_CALL(mock, call(1)).IN_SEQUENCE(s);
+        REQUIRE_CALL(mock, call(2)).IN_SEQUENCE(s);
+        REQUIRE_CALL(mock, call(3)).IN_SEQUENCE(s);
+
+        loop.run_until_complete([&]() -> ito::coro<> {
+            auto [promise, f] = ito::async::promise<>::create();
+            loop.call_soon([&]() noexcept {
+                loop.call_soon([&]() noexcept { mock.call(2); });
+                promise.set_result();
+                mock.call(1);
+            });
+            co_await std::move(f);
+            mock.call(3);
+        }());
+    }
+    SECTION("a timer that expires during a tick resumes on the next tick, after work queued during that tick")
+    {
+        REQUIRE_CALL(mock, call(1)).IN_SEQUENCE(s);
+        REQUIRE_CALL(mock, call(2)).IN_SEQUENCE(s);
+        REQUIRE_CALL(mock, call(3)).IN_SEQUENCE(s);
+        REQUIRE_CALL(mock, call(4)).IN_SEQUENCE(s);
+
+        loop.run_until_complete([&]() -> ito::coro<> {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(20);
+            loop.call_soon([&]() noexcept {
+                while (std::chrono::steady_clock::now() < deadline)
+                {
+                }
+                mock.call(1);
+            });
+            loop.call_soon([&]() noexcept {
+                mock.call(2);
+                loop.call_soon([&]() noexcept { mock.call(3); });
+            });
+            co_await ito::async::sleep_until(deadline);
+            mock.call(4);
+        }());
     }
 }

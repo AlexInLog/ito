@@ -1,8 +1,10 @@
 #include "common.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <ito/async/future.hpp>
 #include <ito/async/sleep.hpp>
 #include <ito/coro.hpp>
+#include <ito/exceptions.hpp>
 #include <ito/loop.hpp>
 #include <ito/task.hpp>
 #include <trompeloeil/mock.hpp>
@@ -167,4 +169,58 @@ TEST_CASE("destroying an awaiter destroys the frame it awaits")
             mock.call(-1);
         }());
     }
+}
+
+TEST_CASE("destroying a task while it sleeps cancels it")
+{
+    ito::loop loop{};
+    call_mock mock{};
+
+    auto sleeper = [&]() -> ito::coro<void> {
+        mock.call(1);
+        co_await ito::async::sleep_for(std::chrono::milliseconds(5));
+        mock.call(-1);
+    };
+
+    loop.run_until_complete([&]() -> ito::coro<> {
+        std::optional<ito::task<void>> task{};
+        task.emplace(ito::loop::current().create_task(sleeper()));
+
+        {
+            REQUIRE_CALL(mock, call(1));
+            co_await ito::async::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        // `task` is suspended inside its sleep; destroying it must drop its timer entry's resume,
+        // so `mock.call(-1)` never fires once that deadline passes
+        task.reset();
+        co_await ito::async::sleep_for(std::chrono::milliseconds(10));
+        co_return;
+    }());
+}
+
+TEST_CASE("a cancelled sleep doesn't keep an otherwise idle loop sleeping")
+{
+    ito::loop loop{};
+
+    auto sleeper = []() -> ito::coro<void> {
+        co_await ito::async::sleep_for(std::chrono::seconds(5));
+    };
+    auto [promise, f] = ito::async::promise<int>::create();
+
+    const auto start = std::chrono::steady_clock::now();
+    REQUIRE_THROWS_AS(
+        loop.run_until_complete([&]() -> ito::coro<int> {
+            {
+                auto task = ito::loop::current().create_task(sleeper());
+                co_await ito::async::sleep_for(std::chrono::milliseconds(1));
+            }
+
+            // nothing can ever resolve `f`, and the only pending timer belongs to the task cancelled above,
+            // so the loop must give up right away instead of sleeping until that dead deadline
+            co_return co_await std::move(f);
+        }()),
+        ito::exceptions::empty_value
+    );
+    REQUIRE(std::chrono::steady_clock::now() - start < std::chrono::seconds(1));
 }

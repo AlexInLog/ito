@@ -23,11 +23,11 @@
 
 namespace ito::details
 {
-    // Coroutine entries the loop can queue. Resuming one never throws: a coroutine body's exceptions are
-    // captured by its promise.
+    // Coroutine entries the loop can queue. Always views, never raw handles: the frame they resume may be destroyed
+    // while they're queued, and the view then turns the resume into a no-op. Resuming never throws: a coroutine
+    // body's exceptions are captured by its promise.
     template<typename T>
-    concept loop_handle = std::same_as<T, std::coroutine_handle<>>
-                       || std::same_as<T, utils::trackable<utils::raii_coroutine_handle<>>::weak_view>
+    concept loop_handle = std::same_as<T, utils::trackable<utils::raii_coroutine_handle<>>::weak_view>
                        || std::same_as<T, utils::trackable<std::coroutine_handle<>>::weak_view>;
 
     // Callbacks must not throw (move_only_callback only accepts nothrow-invocable callables): nobody awaits a
@@ -38,22 +38,16 @@ namespace ito::details
 
     struct loop_entry_executor
     {
-        void operator()(const std::coroutine_handle<>& handle) const
-        {
-            if (handle)
-                handle.resume();
-        }
-
         void operator()(const details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view& handle) const
         {
             if (const auto* ptr = handle.get())
-                (*this)(ptr->get());
+                ptr->get().resume();
         }
 
         void operator()(const details::utils::trackable<std::coroutine_handle<>>::weak_view& handle) const
         {
             if (const auto* ptr = handle.get())
-                (*this)(*ptr);
+                ptr->resume();
         }
         void operator()(utils::move_only_callback& callback) const { callback(); }
     };
@@ -84,6 +78,17 @@ namespace ito::details
             std::pop_heap(m_entries.begin(), m_entries.end(), later);
             const auto _ = utils::finally{[this]() noexcept { m_entries.pop_back(); }};
             return std::move(m_entries.back().view);
+        }
+
+        // Only the earliest entries matter for how long the loop may sleep, so cancelled ones deeper in the
+        // heap are left in place until they surface here.
+        void drop_cancelled_earliest()
+        {
+            while (!m_entries.empty() && !m_entries.front().view.get())
+            {
+                std::pop_heap(m_entries.begin(), m_entries.end(), later);
+                m_entries.pop_back();
+            }
         }
 
     private:
@@ -161,7 +166,6 @@ namespace ito
         loop() = default;
 
         using loop_entry_t = std::variant<
-            std::coroutine_handle<>,
             details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view,
             details::utils::trackable<std::coroutine_handle<>>::weak_view,
             details::utils::move_only_callback>;
@@ -254,13 +258,20 @@ namespace ito
 
                     if (m_queue.empty())
                     {
-                        std::this_thread::sleep_until(m_timers.next_deadline());
+                        m_timers.drop_cancelled_earliest();
+                        if (!m_timers.empty())
+                            std::this_thread::sleep_until(m_timers.next_deadline());
                         continue;
                     }
                 }
 
-                const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
-                std::visit(details::loop_entry_executor{}, m_queue.front());
+                // Runs only the entries ready when this tick started (including the timers just moved in);
+                // anything they schedule waits for the next tick, so timers are checked once per tick.
+                for (auto n = m_queue.size(); n > 0 && !h.done(); --n)
+                {
+                    const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
+                    std::visit(details::loop_entry_executor{}, m_queue.front());
+                }
             }
         }
 

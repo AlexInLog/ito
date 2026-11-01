@@ -70,11 +70,14 @@ Repo: https://github.com/AlexInLog/ito
   coverage gaps that trace back to this.
 - `promise<T>`'s destructor schedules a resume via `loop::try_current()` (not `loop::current()`) specifically because
   it must stay `noexcept`-safe — if you touch that destructor, don't switch it back to the throwing lookup.
-  Double-scheduling a resume (UB) is guarded by `future_state<T>::continuation`'s own move/`detach()` semantics
-  clearing it the instant a resume is scheduled, not by checking `is_ready()` — if you change how `continuation` is
-  consumed, make sure whatever claims it still clears it in the same step, or a promise resolved and destroyed in
-  quick succession will double-schedule its awaiter's resume.
-
+  Double-scheduling a resume (UB) is guarded by `future_state<T>::take_continuation()` clearing `continuation` the
+  instant a resume is scheduled, not by checking `is_ready()` — if you change how `continuation` is consumed, make
+  sure whatever claims it still clears it in the same step, or a promise resolved and destroyed in quick succession
+  will double-schedule its awaiter's resume.
+- Every loop queue entry that resumes a coroutine which can be cancelled (task frames) must be a `weak_view`, not a
+  raw `std::coroutine_handle<>`: destroying a `task<T>` destroys its frame at whatever suspend point it's at, and a
+  raw handle queued before that would resume freed memory. `future<T>`'s awaitable and `sleep_awaitable` both own a
+  `trackable<std::coroutine_handle<>>` for this reason.
 - Exception policy: `loop::call_soon` only accepts coroutine entries or nothrow-invocable callbacks
   (`details::loop_handle`/`details::loop_callback`). Errors travel through coroutines and promises, never out of a
   callback: nobody awaits a callback, so a throw would unwind an unrelated `run_until_complete()`. The check is
