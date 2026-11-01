@@ -2,6 +2,7 @@
 
 #include <ito/coro.hpp>
 #include <ito/details/utils/finally.hpp>
+#include <ito/details/utils/move_only_callback.hpp>
 #include <ito/details/utils/raii_coroutine_handle.hpp>
 #include <ito/details/utils/trackable.hpp>
 #include <ito/exceptions.hpp>
@@ -13,7 +14,6 @@
 #include <concepts>
 #include <coroutine>
 #include <deque>
-#include <functional>
 #include <optional>
 #include <thread>
 #include <type_traits>
@@ -30,10 +30,11 @@ namespace ito::details
                        || std::same_as<T, utils::trackable<utils::raii_coroutine_handle<>>::weak_view>
                        || std::same_as<T, utils::trackable<std::coroutine_handle<>>::weak_view>;
 
-    // Callbacks must not throw: nobody awaits a callback, so its exception would otherwise unwind whichever
-    // run_until_complete() happens to be running, destroying an unrelated coroutine.
+    // Callbacks must not throw (move_only_callback only accepts nothrow-invocable callables): nobody awaits a
+    // callback, so its exception would otherwise unwind whichever run_until_complete() happens to be running,
+    // destroying an unrelated coroutine.
     template<typename Fn>
-    concept loop_callback = std::is_nothrow_invocable_v<std::decay_t<Fn>&> && std::constructible_from<std::function<void()>, Fn&&>;
+    concept loop_callback = std::constructible_from<utils::move_only_callback, Fn&&>;
 
     struct loop_entry_executor
     {
@@ -54,11 +55,7 @@ namespace ito::details
             if (const auto* ptr = handle.get())
                 (*this)(*ptr);
         }
-        void operator()(const std::function<void()>& handle) const
-        {
-            if (handle)
-                handle();
-        }
+        void operator()(utils::move_only_callback& callback) const { callback(); }
     };
 
     class timer_queue
@@ -167,7 +164,7 @@ namespace ito
             std::coroutine_handle<>,
             details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view,
             details::utils::trackable<std::coroutine_handle<>>::weak_view,
-            std::function<void()>>;
+            details::utils::move_only_callback>;
 
         template<typename T>
         T run_until_complete(ito::coro<T>&& coro)
@@ -195,11 +192,16 @@ namespace ito
             return ito::task<T>{std::move(obj)};
         }
 
+        // A callback may run after the coroutine that queued it has finished (later in this run, or in a later
+        // run): own what it touches, e.g. capture a promise by move, rather than referencing a coroutine's locals.
         template<typename Fn>
             requires details::loop_handle<std::remove_cvref_t<Fn>> || details::loop_callback<Fn>
         void call_soon(Fn&& callback)
         {
-            m_queue.emplace_back(std::forward<Fn>(callback));
+            if constexpr (details::loop_handle<std::remove_cvref_t<Fn>>)
+                m_queue.emplace_back(std::forward<Fn>(callback));
+            else
+                m_queue.emplace_back(std::in_place_type_t<details::utils::move_only_callback>{}, std::forward<Fn>(callback));
         }
 
         [[nodiscard]] static auto sleep_until(std::chrono::steady_clock::time_point deadline) { return sleep_awaitable{deadline}; }
@@ -258,7 +260,7 @@ namespace ito
                 }
 
                 const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
-                std::visit(details::loop_entry_executor{}, std::move(m_queue.front()));
+                std::visit(details::loop_entry_executor{}, m_queue.front());
             }
         }
 

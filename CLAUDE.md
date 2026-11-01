@@ -79,6 +79,9 @@ Repo: https://github.com/AlexInLog/ito
   (`details::loop_handle`/`details::loop_callback`). Errors travel through coroutines and promises, never out of a
   callback: nobody awaits a callback, so a throw would unwind an unrelated `run_until_complete()`. The check is
   compile-time only. Don't add `noexcept` to `loop_entry_executor`: it cost ~1.4 ns per callback for no extra safety.
+  Callbacks are stored as `details::utils::move_only_callback`, not `std::function`, so they can own move-only state:
+  the loop can't see what a callback references, and one queued by a coroutine may run after that coroutine is gone,
+  so callbacks should own what they touch (e.g. capture a promise by move) rather than capture frame locals by `&`.
   `run_until_complete` still queues its coroutine as a `weak_view`, because allocation failure inside the loop can
   still unwind it.
 

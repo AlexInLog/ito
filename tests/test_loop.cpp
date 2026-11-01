@@ -2,14 +2,17 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/trompeloeil.hpp>
+#include <ito/async/future.hpp>
 #include <ito/coro.hpp>
 #include <ito/exceptions.hpp>
 #include <ito/loop.hpp>
 #include <trompeloeil/mock.hpp>
 #include <trompeloeil/sequence.hpp>
 
+#include <array>
 #include <coroutine>
 #include <functional>
+#include <memory>
 #include <utility>
 
 
@@ -114,6 +117,92 @@ TEST_CASE("call_soon only accepts callbacks that can't throw")
     STATIC_REQUIRE_FALSE(call_soon_accepts<decltype([]() {})>);
     STATIC_REQUIRE_FALSE(call_soon_accepts<std::function<void()>>);
 
+    // callbacks are stored move-only, so they can own move-only state instead of referencing it
+    STATIC_REQUIRE(call_soon_accepts<decltype([p = std::unique_ptr<int>{}]() noexcept {})>);
+
     // coroutine handles are queued as-is: resuming one never throws, since its promise captures the body's exceptions
     STATIC_REQUIRE(call_soon_accepts<std::coroutine_handle<>>);
+}
+
+TEST_CASE("call_soon callbacks own what they capture")
+{
+    SECTION("a callback owning a promise resolves it")
+    {
+        // the coroutine can only finish if the callback resolved its future; otherwise the loop runs dry
+        // and run_until_complete() throws empty_value
+        ito::loop loop{};
+        REQUIRE_NOTHROW(loop.run_until_complete([&]() -> ito::coro<> {
+            auto [promise, future] = ito::async::promise<>::create();
+            loop.call_soon([p = std::move(promise)]() mutable noexcept { p.set_result(); });
+            co_await std::move(future);
+        }()));
+    }
+
+    SECTION("a callback owning a promise outlives the coroutine that queued it")
+    {
+        ito::loop loop{};
+        loop.run_until_complete([&]() -> ito::coro<> {
+            auto [promise, future] = ito::async::promise<int>::create();
+            loop.call_soon([p = std::move(promise)]() mutable noexcept { p.set_result(42); });
+            co_return; // `future` is gone and the callback is still queued
+        }());
+
+        // the callback runs now, after the coroutine and its `future` died: it owns the promise rather than
+        // referencing the dead frame, so resolving it is a no-op instead of a use-after-free
+        loop.run_until_complete([]() -> ito::coro<> {
+            co_return;
+        }());
+    }
+
+    auto token = std::make_shared<int>(0);
+
+    SECTION("small callback stored inline")
+    {
+        SECTION("is destroyed after it runs")
+        {
+            ito::loop loop{};
+            loop.call_soon([token]() noexcept { ++*token; });
+            loop.run_until_complete([]() -> ito::coro<> {
+                co_return;
+            }());
+
+            REQUIRE(*token == 1);
+            REQUIRE(token.use_count() == 1);
+        }
+        SECTION("is destroyed with the loop if it never runs")
+        {
+            {
+                ito::loop loop{};
+                loop.call_soon([token]() noexcept { ++*token; });
+            }
+            REQUIRE(*token == 0);
+            REQUIRE(token.use_count() == 1);
+        }
+    }
+
+    SECTION("big callback stored on the heap")
+    {
+        std::array<int, 16> padding{};
+
+        SECTION("is destroyed after it runs")
+        {
+            ito::loop loop{};
+            loop.call_soon([token, padding]() noexcept { *token += 1 + padding.front(); });
+            loop.run_until_complete([]() -> ito::coro<> {
+                co_return;
+            }());
+
+            REQUIRE(*token == 1);
+            REQUIRE(token.use_count() == 1);
+        }
+        SECTION("is destroyed with the loop if it never runs")
+        {
+            {
+                ito::loop loop{};
+                loop.call_soon([token, padding]() noexcept { *token += 1 + padding.front(); });
+            }
+            REQUIRE(*token == 0);
+            REQUIRE(token.use_count() == 1);
+        }
+    }
 }
