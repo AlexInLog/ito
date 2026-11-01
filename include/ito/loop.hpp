@@ -14,6 +14,7 @@
 #include <coroutine>
 #include <deque>
 #include <functional>
+#include <optional>
 #include <thread>
 #include <utility>
 #include <variant>
@@ -209,8 +210,18 @@ namespace ito
     private:
         void run_until_complete_impl(std::coroutine_handle<> h)
         {
+            // Queued as a view rather than a raw handle: if a queued entry ahead of it throws, the exception destroys
+            // `h`'s frame along with `tracked`, and a later run of this loop skips the stale entry instead of resuming it.
+            std::optional<details::utils::trackable<std::coroutine_handle<>>> tracked{};
             if (!m_queue.empty())
-                m_queue.emplace_back(std::in_place_type_t<std::coroutine_handle<>>{}, h);
+            {
+                auto [obj, view] = details::utils::trackable<std::coroutine_handle<>>::create(h);
+                tracked.emplace(std::move(obj));
+                m_queue.emplace_back(
+                    std::in_place_type_t<details::utils::trackable<std::coroutine_handle<>>::weak_view>{},
+                    std::move(view)
+                );
+            }
             else
                 h.resume();
 
