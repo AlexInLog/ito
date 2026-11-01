@@ -3,13 +3,10 @@
 #include <ito/coro.hpp>
 #include <ito/details/utils/raii_coroutine_handle.hpp>
 #include <ito/details/utils/trackable.hpp>
-
-#include <coroutine>
+#include <ito/fwd.hpp>
 
 namespace ito
 {
-    class loop;
-
     template<typename T>
     class [[nodiscard("ito::task can't be discarded")]] task final
     {
@@ -36,17 +33,19 @@ namespace ito
             {
                 handle_type _h;
 
-                std::coroutine_handle<typename coro<T>::promise_type> cast() { return _h.get().get<typename coro<T>::promise_type>(); }
+            private:
+                typename coro<T>::promise_type& cast() { return _h.get().get<typename coro<T>::promise_type>().promise(); }
 
-                constexpr bool await_ready() noexcept { return cast().promise().is_ready(); }
+            public:
+                constexpr bool await_ready() noexcept { return cast().is_ready(); }
 
                 auto await_suspend(std::coroutine_handle<> h) noexcept
                 {
-                    cast().promise().continuation = h;
+                    cast().continuation = h;
                     return;
                 }
 
-                T await_resume() { return cast().promise().get_result(); }
+                T await_resume() { return cast().get_result(); }
             };
 
             if (m_h.get()) [[likely]]

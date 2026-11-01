@@ -9,18 +9,17 @@ namespace ito::exceptions
         using std::runtime_error::runtime_error;
     };
 
-    struct value_is_set final : public ito_exception
-    {
-        using ito_exception::ito_exception;
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define ITO_EXCEPTION(name)                  \
+    struct name final : public ito_exception \
+    {                                        \
+        using ito_exception::ito_exception;  \
     };
 
-    struct empty_value final : public ito_exception
-    {
-        using ito_exception::ito_exception;
-    };
+    ITO_EXCEPTION(value_is_set);
+    ITO_EXCEPTION(empty_value);
+    ITO_EXCEPTION(invalid_coro_handle_state);
+    ITO_EXCEPTION(invalid_loop_state);
 
-    struct invalid_coro_handle_state final : public ito_exception
-    {
-        using ito_exception::ito_exception;
-    };
+#undef ITO_EXCEPTION
 } // namespace ito::exceptions

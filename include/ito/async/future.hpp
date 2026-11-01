@@ -3,6 +3,7 @@
 #include <ito/details/utils/coroutine_handle.hpp>
 #include <ito/details/utils/error_or_optional.hpp>
 #include <ito/details/utils/trackable.hpp>
+#include <ito/fwd.hpp>
 #include <ito/loop.hpp>
 
 #include <coroutine>
@@ -146,9 +147,6 @@ namespace ito::async
             ito::details::utils::trackable<details::future_state<T>>::weak_view m_value{};
         };
     } // namespace details
-
-    template<typename T = void>
-    class promise;
 
     template<typename T = void>
     class future

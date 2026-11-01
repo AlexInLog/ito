@@ -3,6 +3,7 @@
 #include <ito/details/utils/error_or_optional.hpp>
 #include <ito/details/utils/raii_coroutine_handle.hpp>
 #include <ito/exceptions.hpp>
+#include <ito/fwd.hpp>
 
 #include <coroutine>
 #include <exception>
@@ -10,13 +11,8 @@
 
 namespace ito
 {
-    class loop;
     namespace details
     {
-        struct void_t
-        {
-        };
-
         [[noreturn]] inline void throw_empty_coro()
         {
             throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to co_await coro"};
@@ -93,10 +89,7 @@ namespace ito
                 T await_resume() { return _h->get_result(); }
             };
 
-            if (m_h) [[likely]]
-                return awaitable{std::move(m_h)};
-
-            details::throw_empty_coro();
+            return awaitable{std::move(*this).detach()};
         }
 
     private:

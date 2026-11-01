@@ -5,6 +5,7 @@
 #include <ito/details/utils/raii_coroutine_handle.hpp>
 #include <ito/details/utils/trackable.hpp>
 #include <ito/exceptions.hpp>
+#include <ito/fwd.hpp>
 #include <ito/task.hpp>
 
 #include <algorithm>
@@ -17,14 +18,6 @@
 #include <utility>
 #include <variant>
 #include <vector>
-
-namespace ito::exceptions
-{
-    struct invalid_loop_state final : public ito_exception
-    {
-        using ito_exception::ito_exception;
-    };
-} // namespace ito::exceptions
 
 namespace ito::details
 {
@@ -39,13 +32,13 @@ namespace ito::details
         void operator()(const details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view& handle) const
         {
             if (const auto* ptr = handle.get())
-                ptr->get().resume();
+                (*this)(ptr->get());
         }
 
         void operator()(const details::utils::trackable<std::coroutine_handle<>>::weak_view& handle) const
         {
             if (const auto* ptr = handle.get())
-                ptr->resume();
+                (*this)(*ptr);
         }
         void operator()(const std::function<void()>& handle) const
         {
@@ -78,14 +71,13 @@ namespace ito::details
         [[nodiscard]] details::utils::trackable<std::coroutine_handle<>>::weak_view pop_earliest()
         {
             std::pop_heap(m_entries.begin(), m_entries.end(), later);
-            auto _ = utils::finally{[this]() noexcept { m_entries.pop_back(); }};
+            const auto _ = utils::finally{[this]() noexcept { m_entries.pop_back(); }};
             return std::move(m_entries.back().view);
         }
 
     private:
         std::vector<entry> m_entries{};
     };
-
 } // namespace ito::details
 
 namespace ito
