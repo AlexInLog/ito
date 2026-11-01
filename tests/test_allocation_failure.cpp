@@ -2,8 +2,10 @@
 // must not leak into the other tests (and keeps sanitizers' own new/delete checks for them).
 
 #include <catch2/catch_test_macros.hpp>
+#include <ito/async/future.hpp>
 #include <ito/async/sleep.hpp>
 #include <ito/coro.hpp>
+#include <ito/exceptions.hpp>
 #include <ito/loop.hpp>
 #include <ito/task.hpp>
 
@@ -45,14 +47,17 @@ TEST_CASE("a timer whose transfer to the ready queue fails to allocate still fir
 {
     using namespace std::chrono_literals;
 
-    // Whether moving a due timer into the ready queue allocates depends on where the queue's storage currently
-    // ends, so retry with a growing number of callbacks run beforehand until that transfer is what fails.
+    // The transfer only allocates when the ready queue has to grow, which depends on how many entries are queued
+    // ahead of it and on the standard library's deque block size (one entry per block on MSVC, about a dozen on
+    // libstdc++, about a hundred on libc++, which also recycles an emptied front block). So queue a growing number
+    // of live entries ahead of it until the transfer is what has to allocate.
     bool hit = false;
-    for (int fill = 0; fill < 64 && !hit; ++fill)
+    for (int queued = 0; queued < 256 && !hit; ++queued)
     {
         ito::loop                      loop{};
         std::optional<ito::task<void>> sleeper{}; // outlives the failed run, so a lost timer would show
         bool                           resumed = false;
+        auto [never_resolved, never]   = ito::async::promise<>::create();
 
         try
         {
@@ -62,26 +67,31 @@ TEST_CASE("a timer whose transfer to the ready queue fails to allocate still fir
                     *resumed = true;
                 }(&resumed)));
 
-                for (int i = 0; i < fill; ++i)
-                    loop.call_soon([]() noexcept {});
-
-                // runs after `sleeper` has started and suspended; once its deadline passes, the next allocation
-                // fails, which is the queue growing to take that due timer unless the queue still has room
-                const auto deadline = std::chrono::steady_clock::now() + 2ms;
-                loop.call_soon([deadline]() noexcept {
+                // runs after `sleeper` has started and suspended: waits out its deadline, so the next tick starts by
+                // moving its timer into the ready queue behind `queued` callbacks, and makes that tick's first
+                // allocation fail
+                loop.call_soon([&loop, queued]() noexcept {
+                    const auto deadline = std::chrono::steady_clock::now() + 2ms;
                     while (std::chrono::steady_clock::now() < deadline)
                     {
                     }
+                    for (int i = 0; i < queued; ++i)
+                        loop.call_soon([]() noexcept {});
                     g_fail_next_allocation = true;
                 });
 
-                co_await ito::async::sleep_for(20ms);
+                // keeps this run going until it either throws or runs dry, without a timer of its own
+                co_await std::move(never);
             }());
         }
         catch (const std::bad_alloc&)
         {
             // only a failure before `sleeper` ran is the case under test; a later one hit some other allocation
             hit = !resumed;
+        }
+        catch (const ito::exceptions::empty_value&) // NOLINT(bugprone-empty-catch)
+        {
+            // the transfer had room and didn't allocate: the run ran dry with `never` unresolved, try the next size
         }
         g_fail_next_allocation = false;
 
