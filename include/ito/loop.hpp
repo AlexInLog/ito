@@ -73,11 +73,14 @@ namespace ito::details
 
         [[nodiscard]] std::chrono::steady_clock::time_point next_deadline() const { return m_entries.front().deadline; }
 
-        [[nodiscard]] details::utils::trackable<std::coroutine_handle<>>::weak_view pop_earliest()
+        // Read separately from pop_earliest() so the view can be moved out first and the entry dropped only once
+        // that succeeded: if moving it into the ready queue fails to allocate, the timer stays in place.
+        [[nodiscard]] details::utils::trackable<std::coroutine_handle<>>::weak_view& earliest() { return m_entries.front().view; }
+
+        void pop_earliest()
         {
             std::pop_heap(m_entries.begin(), m_entries.end(), later);
-            const auto _ = utils::finally{[this]() noexcept { m_entries.pop_back(); }};
-            return std::move(m_entries.back().view);
+            m_entries.pop_back();
         }
 
         // Only the earliest entries matter for how long the loop may sleep, so cancelled ones deeper in the
@@ -85,10 +88,7 @@ namespace ito::details
         void drop_cancelled_earliest()
         {
             while (!m_entries.empty() && !m_entries.front().view.get())
-            {
-                std::pop_heap(m_entries.begin(), m_entries.end(), later);
-                m_entries.pop_back();
-            }
+                pop_earliest();
         }
 
     private:
@@ -251,10 +251,14 @@ namespace ito
                 {
                     const auto now = std::chrono::steady_clock::now();
                     while (!m_timers.empty() && m_timers.next_deadline() <= now)
+                    {
+                        // emplace_back has no effect if it throws, so the view only leaves the heap once it's queued
                         m_queue.emplace_back(
                             std::in_place_type_t<details::utils::trackable<std::coroutine_handle<>>::weak_view>{},
-                            m_timers.pop_earliest()
+                            std::move(m_timers.earliest())
                         );
+                        m_timers.pop_earliest();
+                    }
 
                     if (m_queue.empty())
                     {

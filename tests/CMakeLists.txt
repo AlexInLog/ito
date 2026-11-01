@@ -19,3 +19,16 @@ target_link_libraries(ito_tests
 )
 
 discover_tests(ito_tests)
+
+# Replaces the global operator new/delete, so it can't share an executable with the other tests.
+add_executable(ito_alloc_failure_tests
+    test_allocation_failure.cpp
+)
+
+target_link_libraries(ito_alloc_failure_tests
+    PRIVATE
+        ito
+        Catch2::Catch2WithMain
+)
+
+discover_tests(ito_alloc_failure_tests)
