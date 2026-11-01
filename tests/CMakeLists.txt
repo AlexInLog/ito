@@ -6,6 +6,7 @@ add_executable(ito_tests
     test_future.cpp
     test_task.cpp
     test_sleep.cpp
+    test_move_only_callback.cpp
 
     common.hpp
 )
