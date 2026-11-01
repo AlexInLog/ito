@@ -4,10 +4,12 @@
 #include <ito/async/sleep.hpp>
 #include <ito/coro.hpp>
 #include <ito/loop.hpp>
+#include <ito/task.hpp>
 #include <trompeloeil/mock.hpp>
 #include <trompeloeil/sequence.hpp>
 
 #include <chrono>
+#include <optional>
 
 TEST_CASE("sleep_* blocks until the deadline, then resumes")
 {
@@ -115,4 +117,54 @@ TEST_CASE("sleep while another active tasks is active")
         co_return;
     };
     loop.run_until_complete(create_coro());
+}
+
+// A coroutine's `continuation` is resumed inline from its final_suspend, never through the loop's queue. That's only
+// safe because whoever is stored as the continuation also owns the awaited frame, so it can't be destroyed while
+// that frame still exists. These cases destroy the awaiter while the awaited frame is suspended to pin that down.
+TEST_CASE("destroying an awaiter destroys the frame it awaits")
+{
+    ito::loop l{};
+    call_mock mock{};
+
+    auto sleeping_child = [&]() -> ito::coro<void> {
+        mock.call(2);
+        co_await ito::async::sleep_for(std::chrono::milliseconds(5));
+        mock.call(-2);
+    };
+
+    const auto cancel_after_start = [&](ito::coro<void> awaiter) {
+        l.run_until_complete([&]() -> ito::coro<> {
+            std::optional<ito::task<void>> task{};
+            task.emplace(l.create_task(std::move(awaiter)));
+            {
+                REQUIRE_CALL(mock, call(1));
+                REQUIRE_CALL(mock, call(2));
+                co_await ito::async::sleep_for(std::chrono::milliseconds(1));
+            }
+
+            // the awaiter is suspended in `co_await` on the child, which is suspended in its sleep: destroying the
+            // awaiter must destroy the child too, so neither `mock.call(-2)` nor `mock.call(-1)` ever fires
+            task.reset();
+            co_await ito::async::sleep_for(std::chrono::milliseconds(10));
+        }());
+    };
+
+    SECTION("awaiting a coro")
+    {
+        cancel_after_start([&]() -> ito::coro<void> {
+            mock.call(1);
+            co_await sleeping_child();
+            mock.call(-1);
+        }());
+    }
+    SECTION("awaiting a task")
+    {
+        cancel_after_start([&]() -> ito::coro<void> {
+            mock.call(1);
+            auto child = l.create_task(sleeping_child());
+            co_await std::move(child);
+            mock.call(-1);
+        }());
+    }
 }

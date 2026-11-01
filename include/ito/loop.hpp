@@ -5,6 +5,7 @@
 #include <ito/details/utils/raii_coroutine_handle.hpp>
 #include <ito/details/utils/trackable.hpp>
 #include <ito/exceptions.hpp>
+#include <ito/fwd.hpp>
 #include <ito/task.hpp>
 
 #include <algorithm>
@@ -13,18 +14,11 @@
 #include <coroutine>
 #include <deque>
 #include <functional>
+#include <optional>
 #include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
-
-namespace ito::exceptions
-{
-    struct invalid_loop_state final : public ito_exception
-    {
-        using ito_exception::ito_exception;
-    };
-} // namespace ito::exceptions
 
 namespace ito::details
 {
@@ -39,13 +33,13 @@ namespace ito::details
         void operator()(const details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view& handle) const
         {
             if (const auto* ptr = handle.get())
-                ptr->get().resume();
+                (*this)(ptr->get());
         }
 
         void operator()(const details::utils::trackable<std::coroutine_handle<>>::weak_view& handle) const
         {
             if (const auto* ptr = handle.get())
-                ptr->resume();
+                (*this)(*ptr);
         }
         void operator()(const std::function<void()>& handle) const
         {
@@ -78,14 +72,13 @@ namespace ito::details
         [[nodiscard]] details::utils::trackable<std::coroutine_handle<>>::weak_view pop_earliest()
         {
             std::pop_heap(m_entries.begin(), m_entries.end(), later);
-            auto _ = utils::finally{[this]() noexcept { m_entries.pop_back(); }};
+            const auto _ = utils::finally{[this]() noexcept { m_entries.pop_back(); }};
             return std::move(m_entries.back().view);
         }
 
     private:
         std::vector<entry> m_entries{};
     };
-
 } // namespace ito::details
 
 namespace ito
@@ -217,8 +210,18 @@ namespace ito
     private:
         void run_until_complete_impl(std::coroutine_handle<> h)
         {
+            // Queued as a view rather than a raw handle: if a queued entry ahead of it throws, the exception destroys
+            // `h`'s frame along with `tracked`, and a later run of this loop skips the stale entry instead of resuming it.
+            std::optional<details::utils::trackable<std::coroutine_handle<>>> tracked{};
             if (!m_queue.empty())
-                m_queue.emplace_back(std::in_place_type_t<std::coroutine_handle<>>{}, h);
+            {
+                auto [obj, view] = details::utils::trackable<std::coroutine_handle<>>::create(h);
+                tracked.emplace(std::move(obj));
+                m_queue.emplace_back(
+                    std::in_place_type_t<details::utils::trackable<std::coroutine_handle<>>::weak_view>{},
+                    std::move(view)
+                );
+            }
             else
                 h.resume();
 

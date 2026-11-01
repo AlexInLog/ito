@@ -9,6 +9,7 @@
 #include <trompeloeil/sequence.hpp>
 
 #include <coroutine>
+#include <stdexcept>
 
 
 TEST_CASE("loop bounds self to current")
@@ -99,4 +100,26 @@ TEST_CASE("call_soon relatively to run_until_complete")
 
         loop.call_soon([&]() { mock.call(3); });
     }
+}
+
+TEST_CASE("run_until_complete that throws before its coroutine starts leaves no stale resume of it behind")
+{
+    ito::loop loop{};
+    call_mock mock{};
+
+    // the queue isn't empty, so run_until_complete queues its coroutine's first resume behind this callback;
+    // the callback throws first, and the exception destroys that coroutine before its queued resume ever runs
+    loop.call_soon([]() { throw std::runtime_error{"callback failed"}; });
+    REQUIRE_THROWS_AS(
+        loop.run_until_complete([&]() -> ito::coro<> {
+            mock.call(1); // no expectation set: this coroutine must never run
+            co_return;
+        }()),
+        std::runtime_error
+    );
+
+    // the loop is reused: its next run must skip the destroyed coroutine's queued resume rather than resume freed memory
+    REQUIRE(loop.run_until_complete([]() -> ito::coro<int> {
+        co_return 42;
+    }()) == 42);
 }
