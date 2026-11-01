@@ -1,0 +1,6 @@
+---
+InheritParentConfig: true
+# Tests return a future while its promise is still a local in the same frame. The future holds a back-pointer into
+# that promise until ~weak_view clears it right after the return, which the analyzer doesn't follow (false positive).
+Checks:
+    - '-clang-analyzer-core.StackAddressEscape'
