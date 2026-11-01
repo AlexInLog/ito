@@ -20,15 +20,19 @@ target_link_libraries(ito_tests
 
 discover_tests(ito_tests)
 
-# Replaces the global operator new/delete, so it can't share an executable with the other tests.
-add_executable(ito_alloc_failure_tests
-    test_allocation_failure.cpp
-)
+# Replaces the global operator new/delete, so it can't share an executable with the other tests. TSan, LSan and MSan
+# link their own strong operator new/delete, which a replacement collides with (ASan's are weak and yield to it), so
+# it's skipped there: the test is single-threaded and about allocation failure, which the other builds cover.
+if(NOT (ITO_ENABLE_TSAN OR ITO_ENABLE_LSAN OR ITO_ENABLE_MSAN))
+    add_executable(ito_alloc_failure_tests
+        test_allocation_failure.cpp
+    )
 
-target_link_libraries(ito_alloc_failure_tests
-    PRIVATE
-        ito
-        Catch2::Catch2WithMain
-)
+    target_link_libraries(ito_alloc_failure_tests
+        PRIVATE
+            ito
+            Catch2::Catch2WithMain
+    )
 
-discover_tests(ito_alloc_failure_tests)
+    discover_tests(ito_alloc_failure_tests)
+endif()
