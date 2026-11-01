@@ -34,7 +34,7 @@ static void bm_call_soon_before_noop_coro(benchmark::State& state)
     ito::loop loop{};
     for (auto _ : state)
     {
-        loop.call_soon([]() { });
+        loop.call_soon([]() noexcept { });
         loop.run_until_complete([]() -> ito::coro<> {
             co_return;
         }());
@@ -98,7 +98,7 @@ static void bm_resolve_future_inside_signal(benchmark::State& state)
     {
         benchmark::DoNotOptimize(loop.run_until_complete([&loop]() -> ito::coro<int> {
             auto [promise, f] = ito::async::promise<int>::create();
-            loop.call_soon([&]() { promise.set_result(10); });
+            loop.call_soon([&]() noexcept { promise.set_result(10); });
             co_return co_await std::move(f);
         }()));
     }

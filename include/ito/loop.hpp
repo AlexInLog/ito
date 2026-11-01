@@ -16,12 +16,25 @@
 #include <functional>
 #include <optional>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
 
 namespace ito::details
 {
+    // Coroutine entries the loop can queue. Resuming one never throws: a coroutine body's exceptions are
+    // captured by its promise.
+    template<typename T>
+    concept loop_handle = std::same_as<T, std::coroutine_handle<>>
+                       || std::same_as<T, utils::trackable<utils::raii_coroutine_handle<>>::weak_view>
+                       || std::same_as<T, utils::trackable<std::coroutine_handle<>>::weak_view>;
+
+    // Callbacks must not throw: nobody awaits a callback, so its exception would otherwise unwind whichever
+    // run_until_complete() happens to be running, destroying an unrelated coroutine.
+    template<typename Fn>
+    concept loop_callback = std::is_nothrow_invocable_v<std::decay_t<Fn>&> && std::constructible_from<std::function<void()>, Fn&&>;
+
     struct loop_entry_executor
     {
         void operator()(const std::coroutine_handle<>& handle) const
@@ -183,7 +196,7 @@ namespace ito
         }
 
         template<typename Fn>
-            requires std::constructible_from<loop_entry_t, Fn&&>
+            requires details::loop_handle<std::remove_cvref_t<Fn>> || details::loop_callback<Fn>
         void call_soon(Fn&& callback)
         {
             m_queue.emplace_back(std::forward<Fn>(callback));
@@ -210,8 +223,9 @@ namespace ito
     private:
         void run_until_complete_impl(std::coroutine_handle<> h)
         {
-            // Queued as a view rather than a raw handle: if a queued entry ahead of it throws, the exception destroys
-            // `h`'s frame along with `tracked`, and a later run of this loop skips the stale entry instead of resuming it.
+            // Queued as a view rather than a raw handle: if the loop throws before reaching it (queued entries can't
+            // throw, so this means an allocation failure in the loop itself), the exception destroys `h`'s frame along
+            // with `tracked`, and a later run of this loop skips the stale entry instead of resuming it.
             std::optional<details::utils::trackable<std::coroutine_handle<>>> tracked{};
             if (!m_queue.empty())
             {

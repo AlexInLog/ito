@@ -128,7 +128,7 @@ TEST_CASE("base task logic")
             // hop through the loop once so `task` actually starts and suspends on `co_await f`,
             // rather than being cancelled before it ever ran
             auto [tick_promise, tick] = ito::async::promise<>::create();
-            l.call_soon([&]() { tick_promise.set_result(); });
+            l.call_soon([&]() noexcept { tick_promise.set_result(); });
             {
                 REQUIRE_CALL(mock, call(-1));
                 co_await std::move(tick);

@@ -9,7 +9,8 @@
 #include <trompeloeil/sequence.hpp>
 
 #include <coroutine>
-#include <stdexcept>
+#include <functional>
+#include <utility>
 
 
 TEST_CASE("loop bounds self to current")
@@ -61,18 +62,18 @@ TEST_CASE("call_soon relatively to run_until_complete")
 
     SECTION("no-op coro")
     {
-        loop.call_soon([&]() { mock.call(1); });
+        loop.call_soon([&]() noexcept { mock.call(1); });
 
         {
             REQUIRE_CALL(mock, call(1)).IN_SEQUENCE(s);
 
             loop.run_until_complete([&]() -> ito::coro<> {
-                loop.call_soon([&]() { mock.call(2); });
+                loop.call_soon([&]() noexcept { mock.call(2); });
                 co_return;
             }());
         }
 
-        loop.call_soon([&]() { mock.call(3); });
+        loop.call_soon([&]() noexcept { mock.call(3); });
 
         REQUIRE_CALL(mock, call(2)).IN_SEQUENCE(s);
         REQUIRE_CALL(mock, call(3)).IN_SEQUENCE(s);
@@ -83,13 +84,13 @@ TEST_CASE("call_soon relatively to run_until_complete")
 
     SECTION("suspending coro")
     {
-        loop.call_soon([&]() { mock.call(1); });
+        loop.call_soon([&]() noexcept { mock.call(1); });
 
         REQUIRE_CALL(mock, call(1)).IN_SEQUENCE(s);
 
         REQUIRE_THROWS_AS(
             loop.run_until_complete([&]() -> ito::coro<> {
-                loop.call_soon([&]() { mock.call(2); });
+                loop.call_soon([&]() noexcept { mock.call(2); });
                 REQUIRE_CALL(mock, call(2)).IN_SEQUENCE(s);
 
                 co_await std::suspend_always{};
@@ -98,28 +99,21 @@ TEST_CASE("call_soon relatively to run_until_complete")
             ito::exceptions::empty_value
         );
 
-        loop.call_soon([&]() { mock.call(3); });
+        loop.call_soon([&]() noexcept { mock.call(3); });
     }
 }
 
-TEST_CASE("run_until_complete that throws before its coroutine starts leaves no stale resume of it behind")
+template<typename Fn>
+concept call_soon_accepts = requires(ito::loop& loop, Fn fn) { loop.call_soon(std::move(fn)); };
+
+TEST_CASE("call_soon only accepts callbacks that can't throw")
 {
-    ito::loop loop{};
-    call_mock mock{};
+    // a callback has nobody awaiting it, so a throwing one is rejected at compile time rather than unwinding
+    // whichever run_until_complete() happens to be running
+    STATIC_REQUIRE(call_soon_accepts<decltype([]() noexcept {})>);
+    STATIC_REQUIRE_FALSE(call_soon_accepts<decltype([]() {})>);
+    STATIC_REQUIRE_FALSE(call_soon_accepts<std::function<void()>>);
 
-    // the queue isn't empty, so run_until_complete queues its coroutine's first resume behind this callback;
-    // the callback throws first, and the exception destroys that coroutine before its queued resume ever runs
-    loop.call_soon([]() { throw std::runtime_error{"callback failed"}; });
-    REQUIRE_THROWS_AS(
-        loop.run_until_complete([&]() -> ito::coro<> {
-            mock.call(1); // no expectation set: this coroutine must never run
-            co_return;
-        }()),
-        std::runtime_error
-    );
-
-    // the loop is reused: its next run must skip the destroyed coroutine's queued resume rather than resume freed memory
-    REQUIRE(loop.run_until_complete([]() -> ito::coro<int> {
-        co_return 42;
-    }()) == 42);
+    // coroutine handles are queued as-is: resuming one never throws, since its promise captures the body's exceptions
+    STATIC_REQUIRE(call_soon_accepts<std::coroutine_handle<>>);
 }

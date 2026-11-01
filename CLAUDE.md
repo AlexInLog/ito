@@ -75,6 +75,13 @@ Repo: https://github.com/AlexInLog/ito
   consumed, make sure whatever claims it still clears it in the same step, or a promise resolved and destroyed in
   quick succession will double-schedule its awaiter's resume.
 
+- Exception policy: `loop::call_soon` only accepts coroutine entries or nothrow-invocable callbacks
+  (`details::loop_handle`/`details::loop_callback`). Errors travel through coroutines and promises, never out of a
+  callback: nobody awaits a callback, so a throw would unwind an unrelated `run_until_complete()`. The check is
+  compile-time only. Don't add `noexcept` to `loop_entry_executor`: it cost ~1.4 ns per callback for no extra safety.
+  `run_until_complete` still queues its coroutine as a `weak_view`, because allocation failure inside the loop can
+  still unwind it.
+
 ## CI
 
 - GitHub Actions, split into separate jobs with least-privilege permissions per job (`tests`, `coverage`,
