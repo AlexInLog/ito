@@ -32,7 +32,7 @@ namespace ito::details::utils
     template<typename Storage>
     [[noreturn]] void rethrow_or_throw_empty(const Storage& value)
     {
-        if (const auto err = std::get_if<std::exception_ptr>(&value)) [[likely]]
+        if (const auto err = std::get_if<2>(&value)) [[likely]]
             std::rethrow_exception(*err);
 
         throw_empty_value();
