@@ -123,8 +123,9 @@ TEST_CASE("call_soon only accepts callbacks that can't throw")
     // callbacks are stored move-only, so they can own move-only state instead of referencing it
     STATIC_REQUIRE(call_soon_accepts<decltype([p = std::unique_ptr<int>{}]() noexcept {})>);
 
-    // coroutine handles are queued as-is: resuming one never throws, since its promise captures the body's exceptions
-    STATIC_REQUIRE(call_soon_accepts<std::coroutine_handle<>>);
+    // a raw coroutine handle is rejected: its frame could be destroyed while the resume is queued, so coroutine
+    // resumes are only queued through views that skip a destroyed frame
+    STATIC_REQUIRE_FALSE(call_soon_accepts<std::coroutine_handle<>>);
 }
 
 TEST_CASE("call_soon callbacks own what they capture")
