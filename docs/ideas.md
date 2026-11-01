@@ -30,9 +30,15 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
   (owning what they touch, e.g. a promise captured by move) is always possible.
 - **Unobserved task exceptions are dropped silently:** a task that fails and is destroyed without being awaited
   loses its exception. asyncio logs these; here there isn't even a debug hook.
-- **`bad_alloc` while moving due timers into the queue loses a sleeper:** `pop_earliest()` has already moved the
-  view out when the queue's `emplace_back` throws, so that coroutine is never resumed. It's the one loop-internal
-  path that loses work rather than just failing.
+- **`bad_alloc` while resolving a promise loses its awaiter:** `promise_base::set_result_impl()`/`set_exception()`
+  publish the value first and queue the awaiter's resume afterwards, and `take_continuation()` has already moved the
+  view out of `future_state` by then. If that `call_soon()` throws, the view is destroyed with the exception, the
+  value stays set (so a retry only gets `value_is_set`), and the awaiting coroutine is never resumed. Called from a
+  `noexcept` callback this ends in `terminate()`; called from a coroutine, the awaiter hangs silently. Fixing it
+  means securing the queue slot before the value is published, while still clearing `continuation` in the same step
+  it's claimed (the double-scheduling invariant in `CLAUDE.md`). The timer transfer had the same shape and was fixed
+  by moving the view into the queue before popping it; `tests/test_allocation_failure.cpp` has the allocation hook a
+  test for this would need.
 - **Baseline benchmarks move with code layout:** `benchmark_baseline.cpp` links into the same binary as the ito
   benchmarks, so ito changes shift its unchanged code and CodSpeed reports regressions of up to about 20% on
   `bm_small_std_function`. Building the baselines as their own executable would pin their layout.

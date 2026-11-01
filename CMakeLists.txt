@@ -171,13 +171,21 @@ if(ITO_BUILD_TESTS)
     set(ITO_TEST_RESULTS_DIR  ${CMAKE_BINARY_DIR}/test_results)
     file(MAKE_DIRECTORY ${ITO_TEST_RESULTS_DIR})
 
-    set(ITO_COVERAGE_TARGETS -instr-profile=${ITO_TEST_RESULTS_DIR}/results.profdata -object $<TARGET_FILE:ito_tests>)
-
     macro(discover_tests TARGET)
         target_link_libraries(${TARGET} PRIVATE ito_project_options)
         include(Catch)
         catch_discover_tests(${TARGET} PROPERTIES  ENVIRONMENT "LLVM_PROFILE_FILE=${ITO_TEST_RESULTS_DIR}/${TARGET}-%p.profraw" )
+        set_property(GLOBAL APPEND PROPERTY ITO_TEST_TARGETS ${TARGET})
     endmacro()
+
+    add_subdirectory(tests)
+
+    # Every executable registered through discover_tests() above contributes to the coverage report.
+    get_property(ito_test_targets GLOBAL PROPERTY ITO_TEST_TARGETS)
+    set(ITO_COVERAGE_TARGETS -instr-profile=${ITO_TEST_RESULTS_DIR}/results.profdata)
+    foreach(target IN LISTS ito_test_targets)
+        list(APPEND ITO_COVERAGE_TARGETS -object $<TARGET_FILE:${target}>)
+    endforeach()
 
     add_custom_target(
             coverage
@@ -186,8 +194,6 @@ if(ITO_BUILD_TESTS)
             COMMAND llvm-cov show --ignore-filename-regex=${CMAKE_BINARY_DIR} --show-branches=count -show-instantiations=false ${ITO_COVERAGE_TARGETS} > ${ITO_TEST_RESULTS_DIR}/coverage.txt
             COMMENT "Generating coverage report"
         )
-
-    add_subdirectory(tests)
 endif()
 
 if (ITO_BUILD_BENCHMARKS)
