@@ -1,7 +1,7 @@
 # Internals simplifications
 
 Two planned refactors of `include/ito/details/utils/`. Neither changes behavior. Related open issues and the longer
-roadmap are in `docs/ideas.md` on the `correctness_changes` branch.
+roadmap are in [ideas.md](ideas.md).
 
 ## 1. `guarded<T>`: a reversed `trackable` for queued resumes
 
@@ -15,7 +15,7 @@ The other users only want to resume a coroutine if its frame is still alive:
 - the sleep awaitable (`trackable<std::coroutine_handle<>>`, view in the timer heap),
 - `run_until_complete` (same type, view in the ready queue),
 - `task` (`trackable<raii_coroutine_handle<>>`, view in the ready queue),
-- the future continuation, once the cancellation-aware fix lands.
+- the future continuation (`future<T>`'s awaitable, view in `future_state`).
 
 Here nobody reads the payload on the owner's side. The handle is known when the entry is queued and never changes;
 the owner exists only so that its destruction cancels the queued resume. The payload sits on the wrong side, and the
@@ -61,7 +61,7 @@ public:
   with queuing a raw handle was the missing check.
 - `task` becomes `raii_coroutine_handle m_h; guard m_guard;`, which separates "owns the frame" from "its
   destruction cancels the queued start".
-- `loop_entry_t` becomes `guarded<std::coroutine_handle<>> | std::function<void()>`.
+- `loop_entry_t` becomes `guarded<std::coroutine_handle<>> | move_only_callback`.
 - `trackable` could later be rebuilt on the same link base, if one implementation is wanted.
 
 ### Invariant
@@ -78,13 +78,11 @@ must die with the frame); it just isn't stated anywhere.
 
 ### Order
 
-1. Apply the cancellation-aware future continuation fix and its test ("resolve the future, then destroy the task
-   before its resume runs") from `correctness_changes`. It removes the last raw `call_soon(handle)` users, so the raw
-   `std::coroutine_handle<>` alternative can go from `loop_entry_t` in the same step. That drops `call_soon`'s
-   raw-handle overload, which is a public API change.
-2. Then do this refactor as a pure behavior-preserving change, with the existing tests as the invariant. Run the
-   benchmarks after both steps: the future fix's unexplained +5 to 6.5 ns, and the ~1 ns of `run_until_complete`'s
-   guard, both sit on paths this refactor removes an indirection from.
+The prerequisite is done: future continuations are queued as views, and the raw `std::coroutine_handle<>`
+alternative is gone from `loop_entry_t` (so `call_soon` no longer accepts raw handles). What's left is this refactor,
+as a pure behavior-preserving change with the existing tests as the invariant. Benchmark it: the future fix's
+unexplained +3 ns on `bm_resolve_future_before_await` and the ~1 ns of `run_until_complete`'s guard both sit on
+paths this refactor removes an indirection from.
 
 ### Multi-threading
 
