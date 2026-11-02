@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ito/details/utils/error_or_optional.hpp>
+#include <ito/details/utils/outcome.hpp>
 #include <ito/details/utils/trackable.hpp>
 #include <ito/fwd.hpp>
 #include <ito/loop.hpp>
@@ -25,7 +25,7 @@ namespace ito::async
         template<typename T = void>
         struct future_state
         {
-            ito::details::utils::error_or_optional<T> value{};
+            ito::details::utils::outcome<T> value{};
             // Viewing the awaiting coroutine's handle (owned by the awaitable inside its frame) rather than
             // holding it raw: once scheduled, the loop skips the resume if that frame was destroyed meanwhile.
             std::optional<ito::details::utils::trackable<std::coroutine_handle<>>::weak_view> continuation{};

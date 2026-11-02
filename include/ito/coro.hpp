@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ito/details/utils/error_or_optional.hpp>
+#include <ito/details/utils/outcome.hpp>
 #include <ito/details/utils/raii_coroutine_handle.hpp>
 #include <ito/exceptions.hpp>
 #include <ito/fwd.hpp>
@@ -41,12 +41,12 @@ namespace ito
         template<typename T>
         struct typed_promise_type
             : public details::base_promise_type
-            , protected ito::details::utils::error_or_optional<T>
+            , protected ito::details::utils::outcome<T>
         {
             void unhandled_exception() { this->set_exception(std::current_exception()); }
 
-            using ito::details::utils::error_or_optional<T>::get_result;
-            using ito::details::utils::error_or_optional<T>::is_ready;
+            using ito::details::utils::outcome<T>::get_result;
+            using ito::details::utils::outcome<T>::is_ready;
         };
 
         template<typename T>

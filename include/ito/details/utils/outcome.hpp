@@ -1,18 +1,15 @@
 #pragma once
 
-#include <ito/details/utils/overloaded.hpp>
+#include <ito/details/utils/void.hpp>
 #include <ito/exceptions.hpp>
 #include <ito/fwd.hpp>
 
 #include <exception>
+#include <type_traits>
 #include <variant>
 
 namespace ito::details::utils
 {
-    struct void_t
-    {
-    };
-
     // The failure paths live in their own functions: constructing and throwing the exception is most of
     // the code of the accessors below, and having it there is what keeps those accessors from being
     // inlined into their callers, even though it only ever runs when something went wrong.
@@ -28,7 +25,7 @@ namespace ito::details::utils
 
     // Reports why a result could not be handed out: rethrows the stored exception, or reports the
     // still-empty state (which is also how a valueless_by_exception state is reported, consistently
-    // with error_or_optional_base::is_ready()).
+    // with outcome::is_ready()).
     template<typename Storage>
     [[noreturn]] void rethrow_or_throw_empty(const Storage& value)
     {
@@ -39,9 +36,11 @@ namespace ito::details::utils
     }
 
     template<typename T>
-    class error_or_optional_base
+    class outcome
     {
     public:
+        using stored_t = std::conditional_t<std::is_void_v<T>, void_t, T>;
+
         void set_exception(const std::exception_ptr& err)
         {
             ensure_not_set();
@@ -50,26 +49,39 @@ namespace ito::details::utils
 
         [[nodiscard]] bool is_ready() const { return !m_value.valueless_by_exception() && m_value.index() != 0; }
 
-    protected:
-        void set_result_impl(T&& v)
+        void set_result()
+            requires (std::is_void_v<T>)
+        {
+            ensure_not_set();
+            m_value.template emplace<1>(void_t{});
+        }
+
+        void set_result(stored_t&& v)
+            requires (!std::is_void_v<T>)
         {
             ensure_not_set();
             m_value.template emplace<1>(std::move(v));
         }
 
-        void set_result_impl(const T& v)
+        void set_result(const stored_t& v)
+            requires (!std::is_void_v<T>)
         {
             ensure_not_set();
             m_value.template emplace<1>(v);
         }
 
         // TODO: clear state
-        T&& get_result_impl()
+        std::add_rvalue_reference_t<T> get_result()
         {
             // Deliberately not std::visit(): visiting dispatches through a function table, which neither
             // compiler manages to fold away, while this is the hot path of every awaited future.
             if (const auto value = std::get_if<1>(&m_value)) [[likely]]
-                return std::move(*value);
+            {
+                if constexpr (std::is_void_v<T>)
+                    return;
+                else
+                    return std::move(*value);
+            }
 
             rethrow_or_throw_empty(m_value);
         };
@@ -82,33 +94,6 @@ namespace ito::details::utils
         }
 
     private:
-        std::variant<std::monostate, T, std::exception_ptr> m_value{};
+        std::variant<std::monostate, stored_t, std::exception_ptr> m_value{};
     };
-
-    template<typename T>
-    class error_or_optional : private error_or_optional_base<T>
-    {
-    public:
-        void set_result(const T& v) { this->set_result_impl(v); }
-        void set_result(T&& v) { this->set_result_impl(std::move(v)); }
-        // cppcheck 2.19 misses that this->get_result_impl() goes through the (private, dependent) base; 2.22 doesn't
-        // cppcheck-suppress functionStatic
-        T&&  get_result() { return this->get_result_impl(); }
-
-        using error_or_optional_base<T>::is_ready;
-        using error_or_optional_base<T>::set_exception;
-    };
-
-    template<>
-    class error_or_optional<void> : private error_or_optional_base<void_t>
-    {
-    public:
-        void set_result() { this->set_result_impl(void_t{}); }
-        void get_result() { this->get_result_impl(); }
-
-        using error_or_optional_base<void_t>::is_ready;
-        using error_or_optional_base<void_t>::set_exception;
-    };
-
-
 } // namespace ito::details::utils

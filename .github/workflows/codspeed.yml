@@ -15,6 +15,7 @@ concurrency:
 
 env:
   CONAN_HOME: "${{ github.workspace }}/release/"
+  HASH_NUMBER : 1
 
 jobs:
   benchmarks:
@@ -48,7 +49,7 @@ jobs:
             ~/Library/Caches/ccache
             ${{ env.LOCALAPPDATA }}/ccache
             ${{ env.XDG_CACHE_HOME }}/ccache
-          key: ${{ runner.os }}-deps-benchmark-${{ matrix.mode }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+          key: ${{ runner.os }}-deps-benchmark-${{ matrix.mode }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}-${{ env.HASH_NUMBER }}
 
       - name: Setup Cpp
         uses: aminya/setup-cpp@v1
@@ -64,7 +65,7 @@ jobs:
         id: check_cache
         with:
           path: ${{ env.CONAN_HOME }}
-          key: deps-benchmark-${{ matrix.mode }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+          key: deps-benchmark-${{ matrix.mode }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}-${{ env.HASH_NUMBER }}
 
       - name: conan detect profile
         run: |
