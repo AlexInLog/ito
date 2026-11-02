@@ -67,7 +67,7 @@ jobs:
           cppcheck: ${{ matrix.config.lint }}
 
       - uses: actions/setup-python@v6
-        with: { python-version: "3.8" }
+        with: { python-version: "3.14.10" }
 
       - name: get conan
         uses: turtlebrowser/get-conan@main

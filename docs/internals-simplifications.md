@@ -1,7 +1,8 @@
 # Internals simplifications
 
-Two planned refactors of `include/ito/details/utils/`. Neither changes behavior. Related open issues and the longer
-roadmap are in [ideas.md](ideas.md).
+Two planned refactors of `include/ito/details/utils/`. Neither changes behavior. They're the next step on the
+roadmap, done as two separate PRs, each verified by the existing tests plus benchmarks before and after. Related open
+issues and the longer roadmap are in [ideas.md](ideas.md).
 
 ## 1. `guarded<T>`: a reversed `trackable` for queued resumes
 
@@ -80,9 +81,17 @@ must die with the frame); it just isn't stated anywhere.
 
 The prerequisite is done: future continuations are queued as views, and the raw `std::coroutine_handle<>`
 alternative is gone from `loop_entry_t` (so `call_soon` no longer accepts raw handles). What's left is this refactor,
-as a pure behavior-preserving change with the existing tests as the invariant. Benchmark it: the future fix's
-unexplained +3 ns on `bm_resolve_future_before_await` and the ~1 ns of `run_until_complete`'s guard both sit on
-paths this refactor removes an indirection from.
+as a pure behavior-preserving change with the existing tests as the invariant, in two steps:
+
+1. The `guard`/`guarded<T>` primitive itself, next to `trackable`. This is where the design decisions are: the shared
+   link base, move semantics, and what `guarded<T>` exposes.
+2. Moving the four users onto it (sleep, `run_until_complete`, the future continuation, `task`), which collapses the
+   two handle-view alternatives in `loop_entry_t` into one and shrinks `details::loop_handle` to match. `task` needs
+   the most care: its guard and its `raii_coroutine_handle` become separate members, and the invariant above has to
+   hold for both.
+
+Benchmark it: `run_until_complete`'s guard (~1 ns) and the future continuation both sit on paths this refactor
+removes an indirection from.
 
 ### Multi-threading
 
@@ -94,6 +103,10 @@ them, and their locals are destroyed on the scheduler's thread. Keeping `guarded
 this queued-resume path can be replaced on its own, while `future_state` moves to atomic shared state separately.
 
 ## 2. Flatten `error_or_optional`
+
+Mechanical once one decision is made: how `get_result()` treats consumption (first point under "Points to settle"
+below). The SonarCloud `cpp:S836` false positive on `future<T>::await_resume()` goes through this code, so check
+whether it's still reported afterwards.
 
 ### Problem
 

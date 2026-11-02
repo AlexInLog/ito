@@ -8,10 +8,10 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
 
 - **`future<T>` await cost:** making future continuations cancellation-aware (the awaitable owns a
   `trackable<std::coroutine_handle<>>`, the queue gets its `weak_view`) added about 3 ns on the path that never
-  suspends (`bm_resolve_future_before_await`, 11.9 to 15.0 ns). Replacing `take_continuation()`, which returned the
-  view through a temporary `std::optional`, with `schedule_continuation()`, which moves it straight into the queue,
-  brought it back to about 12.1 ns. The likely cause was that temporary's non-trivial destructor getting in the way of
-  inlining, but the codegen wasn't checked, so confirm the recovery in CodSpeed before closing this.
+  suspends (`bm_resolve_future_before_await`, 11.9 to 15.0 ns) in local walltime runs. CodSpeed simulation, which
+  counts instructions, didn't reproduce it, and local differences of this size were within code-layout noise, so it
+  may never have been a real regression. Not investigated further; revisit only if walltime on stable hardware shows a
+  gap.
 - **Cancelled timers deeper in the heap:** the loop drops cancelled entries from the top of the timer heap before
   it sleeps, so it never waits on a dead deadline. Entries further down keep their memory until they surface.
   Removing them on cancel needs each sleep to know its heap position, which an intrusive timer node would give
@@ -36,27 +36,36 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
   too, the destructor has to swallow the exception (it's `noexcept`) and nothing is left to resume the awaiter.
 - **Baseline benchmarks move with code layout:** `benchmark_baseline.cpp` links into the same binary as the ito
   benchmarks, so ito changes shift its unchanged code and CodSpeed reports regressions of up to about 20% on
-  `bm_small_std_function`. Building the baselines as their own executable would pin their layout.
+  `bm_small_std_function`. Building the baselines as their own executable would pin their layout; not planned for
+  now, so treat changes in the baseline benchmarks as layout noise unless their own code changed.
 - **`coro<T&>` doesn't compile**, because `error_or_optional` stores `T` in a `std::variant`.
+- **SonarCloud `cpp:S836` false positive on `future<T>`'s `await_resume()`:** when a test moves a `future<int>`
+  before awaiting it, the analyzer loses track of the result variant through `trackable`'s defaulted move and reports
+  an uninitialized `int` returned. Index 1 is only ever set by `emplace<1>`, so it can't happen; mark it as a false
+  positive when it shows up. clang-analyzer's `core.uninitialized.UndefReturn` reports the same path. Flattening
+  `error_or_optional` (see the internals doc) changes the code it follows and might make it go away.
 
 ## Next steps
 
-Rough order. The first item comes first because its answer shapes most of the others.
+Rough order. The cleanup comes first because it's small and leaves a simpler base; cancellation comes next because
+its answer shapes most of the others.
 
-1. **Cooperative cancellation and structured concurrency:** today, cancelling means destroying the frame. That stops
+1. **Internal cleanup:** `guarded<T>` and flattening `error_or_optional`, as two separate behavior-preserving PRs.
+   Plan and split in [internals-simplifications.md](internals-simplifications.md).
+2. **Cooperative cancellation and structured concurrency:** today, cancelling means destroying the frame. That stops
    working once I/O arrives: with io_uring the kernel holds pointers into your buffers until the CQE lands, so a
    frame with a read in flight can't just be destroyed. It needs a stop signal the operation observes, an
    `ASYNC_CANCEL` submission, and a wait for completion. On top of that: `when_all` (tuple results, exception
    aggregation), `when_any` (cancelling the losers), task groups, and timeouts.
-2. **Single-threaded sync primitives:** `event`, `mutex`, `semaphore`, `channel<T>`. Each is small, and each pushes
+3. **Single-threaded sync primitives:** `event`, `mutex`, `semaphore`, `channel<T>`. Each is small, and each pushes
    towards intrusive waiter lists, where the node lives in the awaiter and unlinks itself on cancellation. The same
    design could replace the `deque<variant<..., move_only_callback>>` ready queue and the `trackable`-based timer heap,
    and would likely address the first three open issues.
-3. **Allocation work:** a per-loop frame pool via `promise_type::operator new` and an intrusive ready queue,
+4. **Allocation work:** a per-loop frame pool via `promise_type::operator new` and an intrusive ready queue,
    measured with the existing CodSpeed setup.
-4. **Reactor:** epoll first as a baseline, then io_uring. Timers become the `epoll_wait` timeout or
+5. **Reactor:** epoll first as a baseline, then io_uring. Timers become the `epoll_wait` timeout or
    `IORING_OP_TIMEOUT` and replace `std::this_thread::sleep_until`.
-5. **Multi-threading:** `call_soon_threadsafe` with an eventfd wakeup, then a Chase-Lev work-stealing scheduler.
+6. **Multi-threading:** `call_soon_threadsafe` with an eventfd wakeup, then a Chase-Lev work-stealing scheduler.
    This is where `trackable` has to be redesigned, which is another reason to settle cancellation first.
 
 Smaller side projects: `async_generator<T>`, `coro<T&>` support, interop with P2300 `std::execution` senders.
