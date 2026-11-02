@@ -15,12 +15,15 @@ concurrency:
 
 env:
   CONAN_HOME: "${{ github.workspace }}/release/"
-  HASH_NUMBER : 1
+  # Bumped when the runner image changes: the cache keys don't include the image version, and packages built on one
+  # Ubuntu release (glibc/libstdc++) can't be reused on another.
+  HASH_NUMBER : 2
 
 jobs:
   benchmarks:
     name: Run benchmarks (${{ matrix.mode }})
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, which CodSpeed's runner doesn't support yet ("Unsupported system").
+    runs-on: ubuntu-24.04
     permissions: # optional for public repositories
       contents: read # required for actions/checkout
       id-token: write # required for OIDC authentication with CodSpeed
