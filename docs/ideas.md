@@ -39,11 +39,13 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
   `bm_small_std_function`. Building the baselines as their own executable would pin their layout; not planned for
   now, so treat changes in the baseline benchmarks as layout noise unless their own code changed.
 - **`coro<T&>` doesn't compile**, because `outcome` stores `T` in a `std::variant`.
-- **SonarCloud `cpp:S836` false positive on `future<T>`'s `await_resume()`:** when a test moves a `future<int>`
-  before awaiting it, the analyzer loses track of the result variant through `trackable`'s defaulted move and reports
-  an uninitialized `int` returned. Index 1 is only ever set by `emplace<1>`, so it can't happen; mark it as a false
-  positive when it shows up. clang-analyzer's `core.uninitialized.UndefReturn` reports the same path. Flattening
-  `error_or_optional` into `outcome` changed the code it follows; check on the next Sonar run whether it still fires.
+- **SonarCloud `cpp:S836` false positive on `outcome<T>::get_result()`:** when a test moves a `future<int>` before
+  awaiting it, the analyzer loses track of the result variant through `trackable`'s defaulted move and reports an
+  uninitialized `int` returned. Index 1 is only ever set by `emplace<1>`, so it can't happen. Marking it in the
+  SonarCloud UI didn't stick, because Sonar tracks issues by location and the code moved (first in `future.hpp`, then
+  `outcome.hpp` after the flattening), so `sonar-project.properties` now excludes this rule for `outcome.hpp` only. If
+  that code moves to another file, move the exclusion with it. clang-analyzer's `core.uninitialized.UndefReturn`
+  reports the same path.
 
 ## Next steps
 

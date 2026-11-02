@@ -33,7 +33,8 @@ Repo: https://github.com/AlexInLog/ito
 
 - `include/ito/` — public headers.
   - `include/ito/details/` — implementation details not part of the public API (namespace-mirrored, see below).
-  - `include/ito/async/` — async primitives (currently `future.hpp`).
+  - `include/ito/async/` — async primitives: `future.hpp` (`promise<T>`/`future<T>`; `promise.hpp` just includes it)
+    and `sleep.hpp`.
 - Namespaces:
   - `ito` — public API (`coro<T>`, `loop`, `task<T>`).
   - `ito::async` — async primitives layered on top of `coro<T>`, e.g. `promise<T>`/`future<T>` (settable from outside
@@ -55,8 +56,14 @@ Repo: https://github.com/AlexInLog/ito
   `call_soon` tick, independent of whether/when it's `co_await`ed. Destroying the `task<T>` before it's awaited
   cancels it (the underlying coroutine handle is destroyed, so the body may never run past its next suspend point).
 - `details::utils::trackable<T>` — pairs an owning object with a single `weak_view` that gets nulled out when the
-  owner is destroyed or moved-from. Used by `task<T>`/`loop::create_task` so a task's scheduled resume lambda can
-  detect that the task was destroyed before it ran.
+  owner is destroyed or moved-from. Used for `future_state<T>` (shared by `promise`/`future`) and for every queued
+  coroutine resume (`task<T>` starts, sleeps, future continuations, `run_until_complete`), so the loop skips a resume
+  whose frame was destroyed while it was queued. A reversed variant for the queued resumes, `guarded<T>`, is planned
+  (`docs/internals-simplifications.md`).
+- `details::utils::outcome<T>` — the set-once result slot (`variant<monostate, T, exception_ptr>`) behind both `coro<T>`
+  promises and `future_state<T>`. `get_result()` returns `T` and leaves the slot empty, so a result can only be taken
+  once. `set_result()`/`set_exception()` throw `value_is_set` on a second set; a coroutine's `unhandled_exception()`
+  uses the unchecked `replace_with_exception()` instead, because a local's destructor can throw after `co_return`.
 - Scheduler components that aren't generic use a type-erased, compiled-core pattern rather than being templated — keep
   this pattern for new scheduler code unless there's a specific reason to templatize.
 

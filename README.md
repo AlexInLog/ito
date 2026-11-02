@@ -30,6 +30,17 @@ What exists right now:
   without being awaited, the exception is dropped silently.
 - `ito::async::sleep_for`/`ito::async::sleep_until` — suspend a coroutine until a duration elapses or a
   `steady_clock` deadline is reached, backed by a timer queue on `ito::loop`.
+- `loop.call_soon(callback)` — queues a plain callback to run on the next tick. Callbacks must be `noexcept`
+  (enforced at compile time): nothing awaits a callback, so there's nowhere to deliver its exception, and errors
+  belong in coroutines and promises instead. Callbacks are stored move-only, and one queued from a coroutine can run
+  after that coroutine has finished, so it should own what it touches rather than capture the coroutine's locals by
+  reference. Resolving a promise from a callback is the typical use:
+
+  ```cpp
+  auto [promise, future] = ito::async::promise<int>::create();
+  loop.call_soon([p = std::move(promise)]() mutable noexcept { p.set_result(42); });
+  const int value = co_await std::move(future);
+  ```
 
 What's *not* here yet (see [Roadmap](#roadmap)): multi-threading, work-stealing, I/O, cooperative cancellation.
 
@@ -154,7 +165,7 @@ Requires a C++20-capable compiler.
 
 ## Testing
 
-Tests use [Catch2](https://github.com/catchorg/Catch2) and [trompeloeil](https://github.com/rollbear/trompeloeil), and cover coroutine lifetime, result move/copy semantics, exception propagation, and timer/sleep scheduling.
+Tests use [Catch2](https://github.com/catchorg/Catch2) and [trompeloeil](https://github.com/rollbear/trompeloeil), and cover coroutine lifetime, result move/copy semantics, exception propagation, and timer/sleep scheduling. Allocation-failure paths are tested in a separate executable, `ito_alloc_failure_tests`, which replaces the global `operator new`; it isn't built under TSan, LSan or MSan, whose runtimes define their own.
 
 ```bash
 ctest --preset tests
