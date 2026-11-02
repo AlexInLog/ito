@@ -6,12 +6,6 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
 
 ## Open issues
 
-- **`future<T>` await cost:** making future continuations cancellation-aware (the awaitable owns a
-  `trackable<std::coroutine_handle<>>`, the queue gets its `weak_view`) added about 3 ns on the path that never
-  suspends (`bm_resolve_future_before_await`, 11.9 to 15.0 ns) in local walltime runs. CodSpeed simulation, which
-  counts instructions, didn't reproduce it, and local differences of this size were within code-layout noise, so it
-  may never have been a real regression. Not investigated further; revisit only if walltime on stable hardware shows a
-  gap.
 - **Cancelled timers deeper in the heap:** the loop drops cancelled entries from the top of the timer heap before
   it sleeps, so it never waits on a dead deadline. Entries further down keep their memory until they surface.
   Removing them on cancel needs each sleep to know its heap position, which an intrusive timer node would give
@@ -42,8 +36,8 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
 - **SonarCloud `cpp:S836` false positive on `outcome<T>::get_result()`:** when a test moves a `future<int>` before
   awaiting it, the analyzer loses track of the result variant through `trackable`'s defaulted move and reports an
   uninitialized `int` returned. Index 1 is only ever set by `emplace<1>`, so it can't happen. Marking it in the
-  SonarCloud UI didn't stick, because Sonar tracks issues by location and the code moved (first in `future.hpp`, then
-  `outcome.hpp` after the flattening), so `sonar-project.properties` now excludes this rule for `outcome.hpp` only. If
+  SonarCloud UI doesn't stick, because Sonar tracks issues by location and this code has moved before, so
+  `sonar-project.properties` excludes this rule for `outcome.hpp` only. If
   that code moves to another file, move the exclusion with it. clang-analyzer's `core.uninitialized.UndefReturn`
   reports the same path.
 
@@ -52,8 +46,8 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
 Rough order. The cleanup comes first because it's small and leaves a simpler base; cancellation comes next because
 its answer shapes most of the others.
 
-1. **Internal cleanup:** `guarded<T>`, as a behavior-preserving PR. Flattening `error_or_optional` into `outcome` is
-   done. Plan and open points in [internals-simplifications.md](internals-simplifications.md).
+1. **Internal cleanup:** `guarded<T>`, as a behavior-preserving PR. Plan in
+   [internals-simplifications.md](internals-simplifications.md).
 2. **Cooperative cancellation and structured concurrency:** today, cancelling means destroying the frame. That stops
    working once I/O arrives: with io_uring the kernel holds pointers into your buffers until the CQE lands, so a
    frame with a read in flight can't just be destroyed. It needs a stop signal the operation observes, an
