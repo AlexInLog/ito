@@ -2,5 +2,8 @@
 InheritParentConfig: true
 # Tests return a future while its promise is still a local in the same frame. The future holds a back-pointer into
 # that promise until ~weak_view clears it right after the return, which the analyzer doesn't follow (false positive).
+# Tests mostly call capturing coroutine lambdas inline in run_until_complete(), where the closure outlives the run;
+# the check flags every capturing coroutine lambda regardless, so it's off here and ASan catches the unsafe ones.
 Checks:
     - '-clang-analyzer-core.StackAddressEscape'
+    - '-cppcoreguidelines-avoid-capturing-lambda-coroutines'

@@ -7,6 +7,8 @@
 
 namespace ito
 {
+    // An exception escaping the task's coroutine is stored in its promise and rethrown by `co_await`. If the task is
+    // destroyed without being awaited, that exception is dropped silently: nothing logs or reports it.
     template<typename T>
     class [[nodiscard("ito::task can't be discarded")]] task final
     {

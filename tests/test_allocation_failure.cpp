@@ -106,3 +106,55 @@ TEST_CASE("a timer whose transfer to the ready queue fails to allocate still fir
     }
     REQUIRE(hit);
 }
+
+TEST_CASE("a promise whose resume fails to queue still wakes its awaiter once the promise is gone")
+{
+    using namespace std::chrono_literals;
+
+    // As above: queue a growing number of live entries until queuing the awaiter's resume is what has to allocate.
+    bool hit = false;
+    for (int queued = 0; queued < 256 && !hit; ++queued)
+    {
+        ito::loop          loop{};
+        std::optional<int> received{};
+
+        loop.run_until_complete([&]() -> ito::coro<> {
+            auto [promise, future] = ito::async::promise<int>::create();
+            auto awaiter           = loop.create_task([](ito::async::future<int> f, std::optional<int>* out) -> ito::coro<> {
+                *out = co_await std::move(f);
+            }(std::move(future), &received));
+
+            // lets `awaiter` start and suspend on its future
+            co_await ito::async::sleep_for(1ms);
+
+            for (int i = 0; i < queued; ++i)
+                loop.call_soon([]() noexcept {});
+
+            // the value is set first, then queuing `awaiter`'s resume is the next allocation
+            g_fail_next_allocation = true;
+            try
+            {
+                promise.set_result(42);
+            }
+            catch (const std::bad_alloc&)
+            {
+                hit = true;
+            }
+            g_fail_next_allocation = false;
+
+            if (!hit)
+                co_return; // the resume had room in the queue: try the next size
+
+            REQUIRE_FALSE(received.has_value());
+
+            // the failed attempt must have left the awaiter registered: destroying the promise queues its resume,
+            // and it observes the value that was set
+            {
+                [[maybe_unused]] const auto dropped = std::move(promise);
+            }
+            co_await std::move(awaiter);
+            REQUIRE(received == 42);
+        }());
+    }
+    REQUIRE(hit);
+}

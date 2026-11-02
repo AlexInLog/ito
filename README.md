@@ -26,7 +26,8 @@ What exists right now:
   `co_await`ed; destroying it before it's awaited cancels it. A task that hasn't started never runs; a task suspended
   on a `future` or a sleep has its coroutine frame destroyed at that suspension point, so locals are destroyed but
   nothing after the `co_await` runs. There's no cooperative cancellation signal yet, so the task can't observe or
-  react to being cancelled.
+  react to being cancelled. An exception thrown inside a task is rethrown by `co_await`; if the task is destroyed
+  without being awaited, the exception is dropped silently.
 - `ito::async::sleep_for`/`ito::async::sleep_until` — suspend a coroutine until a duration elapses or a
   `steady_clock` deadline is reached, backed by a timer queue on `ito::loop`.
 
@@ -87,6 +88,13 @@ int main()
 }
 ```
 
+A coroutine lambda's captures live in the lambda object, not in the coroutine, so don't pass a capturing lambda
+straight to `create_task` as a temporary: `loop.create_task([&]() -> ito::coro<> { ... }())` destroys the lambda,
+and with it the captures, before the task runs. Name the lambda so it outlives the task, or pass what the body needs
+as parameters. Calling one inline in `run_until_complete(...)` is fine, since the run finishes before that statement
+does. clang-tidy's `cppcoreguidelines-avoid-capturing-lambda-coroutines` flags capturing coroutine lambdas, if you
+want a check for this in your own code; it can't tell the safe form from the unsafe one, so expect it to flag both.
+
 `ito::async::sleep_for`/`sleep_until` suspend the calling coroutine without blocking other queued work; the loop
 resumes it once its deadline is reached:
 
@@ -130,6 +138,10 @@ For local development, `lint` runs the same build with clang-tidy + cppcheck ena
 cmake --preset lint
 cmake --build --preset build
 ```
+
+`tests/.clang-tidy` turns off two checks for the tests: `cppcoreguidelines-avoid-capturing-lambda-coroutines`, which
+stays on for the library (see the `create_task` note above), and `clang-analyzer-core.StackAddressEscape`, which
+reports a false positive on futures returned while their promise is still a local.
 
 Useful CMake options:
 

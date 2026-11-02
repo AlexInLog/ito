@@ -9,7 +9,6 @@ Checks:
     - '-macro*'
     - 'readability-identifier-naming'
     - 'cppcoreguidelines-*'
-    - '-cppcoreguidelines-avoid-capturing-lambda-coroutines'
     - '-cppcoreguidelines-avoid-magic-numbers'
     - 'modernize-*'
     - '-modernize-use-trailing-return-type'

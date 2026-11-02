@@ -9,6 +9,7 @@
 #include <trompeloeil/sequence.hpp>
 
 #include <optional>
+#include <stdexcept>
 
 TEST_CASE("base task logic")
 {
@@ -178,5 +179,26 @@ TEST_CASE("base task logic")
             co_await std::move(drain);
             co_return;
         }());
+    }
+    SECTION("a task that throws and is destroyed without being awaited drops its exception")
+    {
+        REQUIRE_NOTHROW(l.run_until_complete([&]() -> ito::coro<> {
+            // named rather than a temporary: the task runs after this statement, and its body reads the captures
+            auto throwing = [&]() -> ito::coro<int> {
+                mock.call(-1);
+                throw std::runtime_error{"never observed"};
+                co_return 0;
+            };
+            {
+                auto failing = l.create_task(throwing());
+
+                // hop through the loop once so `failing` actually runs and fails, then drop it unawaited
+                auto [tick_promise, tick] = ito::async::promise<>::create();
+                l.call_soon([&]() noexcept { tick_promise.set_result(); });
+                REQUIRE_CALL(mock, call(-1));
+                co_await std::move(tick);
+            }
+            co_return;
+        }()));
     }
 }
