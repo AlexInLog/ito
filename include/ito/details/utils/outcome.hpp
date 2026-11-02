@@ -1,11 +1,13 @@
 #pragma once
 
+#include <ito/details/utils/finally.hpp>
 #include <ito/details/utils/void.hpp>
 #include <ito/exceptions.hpp>
 #include <ito/fwd.hpp>
 
 #include <exception>
 #include <type_traits>
+#include <utility>
 #include <variant>
 
 namespace ito::details::utils
@@ -47,6 +49,11 @@ namespace ito::details::utils
             m_value.template emplace<2>(err);
         }
 
+        // For a coroutine's unhandled_exception(): the body didn't complete normally, so the exception wins even over a
+        // value already returned, since a local's destructor can throw after return_value(). Checking here instead
+        // would throw value_is_set out of unhandled_exception(), and so out of resume().
+        void replace_with_exception(const std::exception_ptr& err) { m_value.template emplace<2>(err); }
+
         [[nodiscard]] bool is_ready() const { return !m_value.valueless_by_exception() && m_value.index() != 0; }
 
         void set_result()
@@ -70,9 +77,12 @@ namespace ito::details::utils
             m_value.template emplace<1>(v);
         }
 
-        // TODO: clear state
-        std::add_rvalue_reference_t<T> get_result()
+        // Hands the result out once and leaves the outcome empty on every path: the guard empties the slot
+        // after the value has been moved into the return object, or while the stored exception unwinds.
+        T get_result()
         {
+            const auto _ = finally{[this]() noexcept { m_value.template emplace<0>(); }};
+
             // Deliberately not std::visit(): visiting dispatches through a function table, which neither
             // compiler manages to fold away, while this is the hot path of every awaited future.
             if (const auto value = std::get_if<1>(&m_value)) [[likely]]
@@ -84,7 +94,7 @@ namespace ito::details::utils
             }
 
             rethrow_or_throw_empty(m_value);
-        };
+        }
 
     private:
         void ensure_not_set()

@@ -43,7 +43,7 @@ namespace ito
             : public details::base_promise_type
             , protected ito::details::utils::outcome<T>
         {
-            void unhandled_exception() { this->set_exception(std::current_exception()); }
+            void unhandled_exception() { this->replace_with_exception(std::current_exception()); }
 
             using ito::details::utils::outcome<T>::get_result;
             using ito::details::utils::outcome<T>::is_ready;

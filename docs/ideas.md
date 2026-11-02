@@ -38,20 +38,20 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
   benchmarks, so ito changes shift its unchanged code and CodSpeed reports regressions of up to about 20% on
   `bm_small_std_function`. Building the baselines as their own executable would pin their layout; not planned for
   now, so treat changes in the baseline benchmarks as layout noise unless their own code changed.
-- **`coro<T&>` doesn't compile**, because `error_or_optional` stores `T` in a `std::variant`.
+- **`coro<T&>` doesn't compile**, because `outcome` stores `T` in a `std::variant`.
 - **SonarCloud `cpp:S836` false positive on `future<T>`'s `await_resume()`:** when a test moves a `future<int>`
   before awaiting it, the analyzer loses track of the result variant through `trackable`'s defaulted move and reports
   an uninitialized `int` returned. Index 1 is only ever set by `emplace<1>`, so it can't happen; mark it as a false
   positive when it shows up. clang-analyzer's `core.uninitialized.UndefReturn` reports the same path. Flattening
-  `error_or_optional` (see the internals doc) changes the code it follows and might make it go away.
+  `error_or_optional` into `outcome` changed the code it follows; check on the next Sonar run whether it still fires.
 
 ## Next steps
 
 Rough order. The cleanup comes first because it's small and leaves a simpler base; cancellation comes next because
 its answer shapes most of the others.
 
-1. **Internal cleanup:** `guarded<T>` and flattening `error_or_optional`, as two separate behavior-preserving PRs.
-   Plan and split in [internals-simplifications.md](internals-simplifications.md).
+1. **Internal cleanup:** `guarded<T>`, as a behavior-preserving PR. Flattening `error_or_optional` into `outcome` is
+   done. Plan and open points in [internals-simplifications.md](internals-simplifications.md).
 2. **Cooperative cancellation and structured concurrency:** today, cancelling means destroying the frame. That stops
    working once I/O arrives: with io_uring the kernel holds pointers into your buffers until the CQE lands, so a
    frame with a read in flight can't just be destroyed. It needs a stop signal the operation observes, an

@@ -1,7 +1,8 @@
 # Internals simplifications
 
-Two planned refactors of `include/ito/details/utils/`. Neither changes behavior. They're the next step on the
-roadmap, done as two separate PRs, each verified by the existing tests plus benchmarks before and after. Related open
+Two refactors of `include/ito/details/utils/`. Neither changes behavior. The second (flattening
+`error_or_optional`) is done; the first is the next step on the roadmap, verified by the existing tests plus
+benchmarks before and after. Related open
 issues and the longer roadmap are in [ideas.md](ideas.md).
 
 ## 1. `guarded<T>`: a reversed `trackable` for queued resumes
@@ -102,49 +103,39 @@ bit and destroys the frame without resuming it. The cost is that cancelled frame
 them, and their locals are destroyed on the scheduler's thread. Keeping `guarded` separate from `trackable` means
 this queued-resume path can be replaced on its own, while `future_state` moves to atomic shared state separately.
 
-## 2. Flatten `error_or_optional`
+## 2. Flatten `error_or_optional` (done)
 
-Mechanical once one decision is made: how `get_result()` treats consumption (first point under "Points to settle"
-below). The SonarCloud `cpp:S836` false positive on `future<T>::await_resume()` goes through this code, so check
-whether it's still reported afterwards.
-
-### Problem
-
-One concept (a set-once `variant<monostate, T, exception_ptr>`) is spread over `error_or_optional_base<T>`,
-`error_or_optional<T>`, `error_or_optional<void>` and `void_t`. The layering exists only to give `set_result()` and
-`get_result()` their void forms.
-
-### Design
-
-C++20 constrained non-template members collapse it into one class:
+The set-once `variant<monostate, T, exception_ptr>` used to be spread over `error_or_optional_base<T>`,
+`error_or_optional<T>`, `error_or_optional<void>` and `void_t`, only to give `set_result()` and `get_result()` their
+void forms. It's now one class, `outcome<T>` in `outcome.hpp` (`void_t` moved to `void.hpp`), using C++20
+constrained members:
 
 ```cpp
 template<typename T>
-class error_or_optional {
-    using stored_t = std::conditional_t<std::is_void_v<T>, void_t, T>;
+class outcome {
 public:
-    void set_result() requires std::is_void_v<T>;
+    using stored_t = std::conditional_t<std::is_void_v<T>, void_t, T>;
+    void set_result() requires (std::is_void_v<T>);
     void set_result(const stored_t&) requires (!std::is_void_v<T>);
     void set_result(stored_t&&)      requires (!std::is_void_v<T>);
-    std::add_rvalue_reference_t<T> get_result();   // void for T = void
+    T get_result();                                // consumes the result; void for T = void
+    void replace_with_exception(const std::exception_ptr&);   // unchecked, for unhandled_exception()
     // is_ready(), set_exception() unchanged
 };
 ```
 
-`std::add_rvalue_reference_t<void>` is `void`, so `get_result()` needs no special case. Codegen should be the same.
-Check the benchmarks anyway, since the `get_if` hot path and the out-of-line throw helpers were tuned for inlining.
+Behavior and benchmarks are unchanged (all within noise), and it builds and passes with both clang and GCC. The
+now-unused `overloaded.hpp` was deleted with it.
 
-### Points to settle while in there
+### Follow-ups, also done
 
-- **`get_result()` returns `T&&` into its own storage and never marks it consumed** (the `// TODO: clear state`).
-  This is safe only because every consumer is single-shot (`co_await` is `&&`-qualified, `run_until_complete`
-  returns by value). A second call silently returns a moved-from `T`. Either document single consumption as the
-  caller's invariant, or move out and reset to `monostate`. That reset is an extra destroy on the hot path, so
-  measure it.
-- **The name** describes the type algebra, not the role. `result_slot<T>` or `outcome<T>` would fit better. Rename it
-  only as part of this change, to avoid churn.
-- **`ensure_not_set()` is redundant for the `coro` promise**, since the language already guarantees a single
-  `return_value`/`unhandled_exception`. Only `future` needs it. It's one predictable branch, so not worth splitting
-  the type over.
-- **Unused include:** `error_or_optional.hpp` includes `overloaded.hpp` but uses nothing from it, and nothing else
-  in `include/` uses `overloaded`.
+- **`get_result()` returns `T` and consumes the result.** Every caller returns `T` by value, and with guaranteed copy
+  elision returning `T` costs the same single move as returning `T&&` (checked with a move-counting type on clang and
+  GCC). A guard empties the slot on every exit path, so a second call reports `empty_value` rather than handing out a
+  moved-from `T` or rethrowing the same exception. Benchmarks are unchanged: the moved-from `T` was destroyed later
+  anyway. `tests/test_outcome.cpp` covers it.
+- **The coroutine promise no longer goes through `ensure_not_set()`.** It wasn't just redundant there: a local whose
+  destructor throws after `co_return` makes `unhandled_exception()` run after `return_value()`, and the check then
+  threw `value_is_set` out of `unhandled_exception()`, and so out of `resume()`, hiding the real exception.
+  `unhandled_exception()` now uses `outcome::replace_with_exception()`, which overwrites unchecked; `future`'s
+  `set_exception()` keeps the check, since a second set there is a caller error. Covered in `tests/test_coro.cpp`.
