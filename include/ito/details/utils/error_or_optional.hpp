@@ -91,6 +91,8 @@ namespace ito::details::utils
     public:
         void set_result(const T& v) { this->set_result_impl(v); }
         void set_result(T&& v) { this->set_result_impl(std::move(v)); }
+        // cppcheck 2.19 misses that this->get_result_impl() goes through the (private, dependent) base; 2.22 doesn't
+        // cppcheck-suppress functionStatic
         T&&  get_result() { return this->get_result_impl(); }
 
         using error_or_optional_base<T>::is_ready;
