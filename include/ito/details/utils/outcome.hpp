@@ -20,19 +20,26 @@ namespace ito::details::utils
         throw ito::exceptions::empty_value{"empty value"};
     }
 
+    [[noreturn]] inline void throw_value_taken()
+    {
+        throw ito::exceptions::empty_value{"value already taken"};
+    }
+
     [[noreturn]] inline void throw_value_is_set()
     {
         throw ito::exceptions::value_is_set{"value is already set"};
     }
 
-    // Reports why a result could not be handed out: rethrows the stored exception, or reports the
-    // still-empty state (which is also how a valueless_by_exception state is reported, consistently
-    // with outcome::is_ready()).
+    // Reports why a result could not be handed out: rethrows the stored exception, reports that it was already
+    // taken, or reports the never-set state (which is also how a valueless_by_exception state is reported,
+    // consistently with outcome::is_settled()).
     template<typename Storage>
     [[noreturn]] void rethrow_or_throw_empty(const Storage& value)
     {
         if (const auto err = std::get_if<2>(&value)) [[likely]]
             std::rethrow_exception(*err);
+        if (value.index() == 3)
+            throw_value_taken();
 
         throw_empty_value();
     }
@@ -40,7 +47,12 @@ namespace ito::details::utils
     template<typename T>
     class outcome
     {
-        using moved_out_t = void_t;
+        // Set once and already handed out by get_result(): distinct from monostate (never set), so the outcome still
+        // counts as settled and can't be set again. Its own type rather than void_t, which is already index 1 for void.
+        struct moved_out_t
+        {
+        };
+
     public:
         using stored_t = std::conditional_t<std::is_void_v<T>, void_t, T>;
 
@@ -55,7 +67,12 @@ namespace ito::details::utils
         // would throw value_is_set out of unhandled_exception(), and so out of resume().
         void replace_with_exception(const std::exception_ptr& err) { m_value.template emplace<2>(err); }
 
-        [[nodiscard]] bool is_ready() const { return !m_value.valueless_by_exception() && (m_value.index() == 1 || m_value.index() == 2) ; }
+        // A result (value or exception) is there to be taken.
+        [[nodiscard]] bool is_ready() const { return m_value.index() == 1 || m_value.index() == 2; }
+
+        // A result was set, whether or not it has been taken since. A valueless_by_exception state (a set_result()
+        // whose T constructor threw) counts as never set, so the set can be retried.
+        [[nodiscard]] bool is_settled() const { return m_value.index() != 0 && !m_value.valueless_by_exception(); }
 
         void set_result()
             requires (std::is_void_v<T>)
@@ -78,8 +95,8 @@ namespace ito::details::utils
             m_value.template emplace<1>(v);
         }
 
-        // Hands the result out once and leaves the outcome empty on every path: the guard empties the slot
-        // after the value has been moved into the return object, or while the stored exception unwinds.
+        // Hands the result out once and marks the outcome as taken on every path: the guard does so after the value
+        // has been moved into the return object, or while the stored exception unwinds.
         T get_result()
         {
             const auto _ = finally{[this]() noexcept { m_value.template emplace<3>(); }};
@@ -91,7 +108,10 @@ namespace ito::details::utils
                 if constexpr (std::is_void_v<T>)
                     return;
                 else
-                    return std::move(*value);
+                    // clang-analyzer loses track of the variant through trackable's defaulted move and reports an
+                    // uninitialized value; index 1 is only ever set by emplace<1>. Same false positive as Sonar's
+                    // cpp:S836, excluded in sonar-project.properties.
+                    return std::move(*value); // NOLINT(clang-analyzer-core.uninitialized.UndefReturn)
             }
 
             rethrow_or_throw_empty(m_value);
@@ -100,7 +120,7 @@ namespace ito::details::utils
     private:
         void ensure_not_set()
         {
-            if (is_ready()) [[unlikely]]
+            if (is_settled()) [[unlikely]]
                 throw_value_is_set();
         }
 

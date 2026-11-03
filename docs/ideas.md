@@ -39,7 +39,8 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
   SonarCloud UI doesn't stick, because Sonar tracks issues by location and this code has moved before, so
   `sonar-project.properties` excludes this rule for `outcome.hpp` only. If
   that code moves to another file, move the exclusion with it. clang-analyzer's `core.uninitialized.UndefReturn`
-  reports the same path.
+  reports the same path and fails the lint build since `outcome` gained its taken state, so that line also carries a
+  `NOLINT` for it.
 
 ## Next steps
 

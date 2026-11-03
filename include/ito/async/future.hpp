@@ -98,7 +98,7 @@ namespace ito::async
             [[nodiscard]] bool is_settled() const
             {
                 const auto ptr = m_value.get();
-                return !ptr || ptr->value.is_ready();
+                return !ptr || ptr->value.is_settled();
             }
 
         protected:
@@ -113,7 +113,7 @@ namespace ito::async
             // try/catch) is what stops the destructor itself from being inlined into its caller.
             static void notify_broken_future(details::future_state<T>* ptr) noexcept
             {
-                if (!ptr->value.is_ready()) [[unlikely]]
+                if (!ptr->value.is_settled()) [[unlikely]]
                 {
                     // set_exception()/make_exception_ptr() can throw (e.g. std::bad_alloc); swallow it
                     // rather than let it escape this noexcept destructor and terminate() — the

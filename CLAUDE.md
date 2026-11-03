@@ -60,10 +60,12 @@ Repo: https://github.com/AlexInLog/ito
   coroutine resume (`task<T>` starts, sleeps, future continuations, `run_until_complete`), so the loop skips a resume
   whose frame was destroyed while it was queued. A reversed variant for the queued resumes, `guarded<T>`, is planned
   (`docs/internals-simplifications.md`).
-- `details::utils::outcome<T>` — the set-once result slot (`variant<monostate, T, exception_ptr>`) behind both `coro<T>`
-  promises and `future_state<T>`. `get_result()` returns `T` and leaves the slot empty, so a result can only be taken
-  once. `set_result()`/`set_exception()` throw `value_is_set` on a second set; a coroutine's `unhandled_exception()`
-  uses the unchecked `replace_with_exception()` instead, because a local's destructor can throw after `co_return`.
+- `details::utils::outcome<T>` — the set-once result slot (`variant<monostate, T, exception_ptr, moved_out_t>`) behind
+  both `coro<T>` promises and `future_state<T>`. `get_result()` returns `T` and marks the slot as taken (`moved_out_t`,
+  distinct from `monostate`, which means never set), so a result can only be taken once: a second call reports "value
+  already taken". `is_ready()` means a result is there to take; `is_settled()` means one was set, taken or not, and is
+  what `set_result()`/`set_exception()` check before throwing `value_is_set`. A coroutine's `unhandled_exception()` uses the unchecked
+  `replace_with_exception()` instead, because a local's destructor can throw after `co_return`.
 - Scheduler components that aren't generic use a type-erased, compiled-core pattern rather than being templated — keep
   this pattern for new scheduler code unless there's a specific reason to templatize.
 
