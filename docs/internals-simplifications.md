@@ -1,10 +1,10 @@
 # Internals simplifications
 
-Two planned refactors of `include/ito/details/utils/`. Neither changes behavior. They're the next step on the
-roadmap, done as two separate PRs, each verified by the existing tests plus benchmarks before and after. Related open
-issues and the longer roadmap are in [ideas.md](ideas.md).
+A planned refactor of `include/ito/details/utils/`, the next step on the roadmap. It doesn't change behavior and is
+verified by the existing tests plus benchmarks before and after. Related open issues and the longer roadmap are in
+[ideas.md](ideas.md).
 
-## 1. `guarded<T>`: a reversed `trackable` for queued resumes
+## `guarded<T>`: a reversed `trackable` for queued resumes
 
 ### Problem
 
@@ -79,9 +79,7 @@ must die with the frame); it just isn't stated anywhere.
 
 ### Order
 
-The prerequisite is done: future continuations are queued as views, and the raw `std::coroutine_handle<>`
-alternative is gone from `loop_entry_t` (so `call_soon` no longer accepts raw handles). What's left is this refactor,
-as a pure behavior-preserving change with the existing tests as the invariant, in two steps:
+A pure behavior-preserving change, with the existing tests as the invariant, in two steps:
 
 1. The `guard`/`guarded<T>` primitive itself, next to `trackable`. This is where the design decisions are: the shared
    link base, move semantics, and what `guarded<T>` exposes.
@@ -101,50 +99,3 @@ replacement is a strong ref in the queue plus a cancelled bit and refcount in th
 bit and destroys the frame without resuming it. The cost is that cancelled frames live until the scheduler reaches
 them, and their locals are destroyed on the scheduler's thread. Keeping `guarded` separate from `trackable` means
 this queued-resume path can be replaced on its own, while `future_state` moves to atomic shared state separately.
-
-## 2. Flatten `error_or_optional`
-
-Mechanical once one decision is made: how `get_result()` treats consumption (first point under "Points to settle"
-below). The SonarCloud `cpp:S836` false positive on `future<T>::await_resume()` goes through this code, so check
-whether it's still reported afterwards.
-
-### Problem
-
-One concept (a set-once `variant<monostate, T, exception_ptr>`) is spread over `error_or_optional_base<T>`,
-`error_or_optional<T>`, `error_or_optional<void>` and `void_t`. The layering exists only to give `set_result()` and
-`get_result()` their void forms.
-
-### Design
-
-C++20 constrained non-template members collapse it into one class:
-
-```cpp
-template<typename T>
-class error_or_optional {
-    using stored_t = std::conditional_t<std::is_void_v<T>, void_t, T>;
-public:
-    void set_result() requires std::is_void_v<T>;
-    void set_result(const stored_t&) requires (!std::is_void_v<T>);
-    void set_result(stored_t&&)      requires (!std::is_void_v<T>);
-    std::add_rvalue_reference_t<T> get_result();   // void for T = void
-    // is_ready(), set_exception() unchanged
-};
-```
-
-`std::add_rvalue_reference_t<void>` is `void`, so `get_result()` needs no special case. Codegen should be the same.
-Check the benchmarks anyway, since the `get_if` hot path and the out-of-line throw helpers were tuned for inlining.
-
-### Points to settle while in there
-
-- **`get_result()` returns `T&&` into its own storage and never marks it consumed** (the `// TODO: clear state`).
-  This is safe only because every consumer is single-shot (`co_await` is `&&`-qualified, `run_until_complete`
-  returns by value). A second call silently returns a moved-from `T`. Either document single consumption as the
-  caller's invariant, or move out and reset to `monostate`. That reset is an extra destroy on the hot path, so
-  measure it.
-- **The name** describes the type algebra, not the role. `result_slot<T>` or `outcome<T>` would fit better. Rename it
-  only as part of this change, to avoid churn.
-- **`ensure_not_set()` is redundant for the `coro` promise**, since the language already guarantees a single
-  `return_value`/`unhandled_exception`. Only `future` needs it. It's one predictable branch, so not worth splitting
-  the type over.
-- **Unused include:** `error_or_optional.hpp` includes `overloaded.hpp` but uses nothing from it, and nothing else
-  in `include/` uses `overloaded`.

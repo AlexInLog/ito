@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ito/details/utils/error_or_optional.hpp>
+#include <ito/details/utils/outcome.hpp>
 #include <ito/details/utils/trackable.hpp>
 #include <ito/fwd.hpp>
 #include <ito/loop.hpp>
@@ -25,7 +25,7 @@ namespace ito::async
         template<typename T = void>
         struct future_state
         {
-            ito::details::utils::error_or_optional<T> value{};
+            ito::details::utils::outcome<T> value{};
             // Viewing the awaiting coroutine's handle (owned by the awaitable inside its frame) rather than
             // holding it raw: once scheduled, the loop skips the resume if that frame was destroyed meanwhile.
             std::optional<ito::details::utils::trackable<std::coroutine_handle<>>::weak_view> continuation{};
@@ -98,7 +98,7 @@ namespace ito::async
             [[nodiscard]] bool is_settled() const
             {
                 const auto ptr = m_value.get();
-                return !ptr || ptr->value.is_ready();
+                return !ptr || ptr->value.is_settled();
             }
 
         protected:
@@ -113,7 +113,7 @@ namespace ito::async
             // try/catch) is what stops the destructor itself from being inlined into its caller.
             static void notify_broken_future(details::future_state<T>* ptr) noexcept
             {
-                if (!ptr->value.is_ready()) [[unlikely]]
+                if (!ptr->value.is_settled()) [[unlikely]]
                 {
                     // set_exception()/make_exception_ptr() can throw (e.g. std::bad_alloc); swallow it
                     // rather than let it escape this noexcept destructor and terminate() — the

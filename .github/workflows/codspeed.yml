@@ -15,11 +15,15 @@ concurrency:
 
 env:
   CONAN_HOME: "${{ github.workspace }}/release/"
+  # Bumped when the runner image changes: the cache keys don't include the image version, and packages built on one
+  # Ubuntu release (glibc/libstdc++) can't be reused on another.
+  HASH_NUMBER : 2
 
 jobs:
   benchmarks:
     name: Run benchmarks (${{ matrix.mode }})
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, which CodSpeed's runner doesn't support yet ("Unsupported system").
+    runs-on: ubuntu-24.04
     permissions: # optional for public repositories
       contents: read # required for actions/checkout
       id-token: write # required for OIDC authentication with CodSpeed
@@ -48,7 +52,7 @@ jobs:
             ~/Library/Caches/ccache
             ${{ env.LOCALAPPDATA }}/ccache
             ${{ env.XDG_CACHE_HOME }}/ccache
-          key: ${{ runner.os }}-deps-benchmark-${{ matrix.mode }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+          key: ${{ runner.os }}-deps-benchmark-${{ matrix.mode }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}-${{ env.HASH_NUMBER }}
 
       - name: Setup Cpp
         uses: aminya/setup-cpp@v1
@@ -64,7 +68,7 @@ jobs:
         id: check_cache
         with:
           path: ${{ env.CONAN_HOME }}
-          key: deps-benchmark-${{ matrix.mode }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}
+          key: deps-benchmark-${{ matrix.mode }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}-${{ env.HASH_NUMBER }}
 
       - name: conan detect profile
         run: |

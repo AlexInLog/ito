@@ -15,21 +15,23 @@ permissions:
 
 env:
   CONAN_HOME: "${{ github.workspace }}/release/"
-  HASH_NUMBER : 1
+  # Bumped when a runner image changes: the cache keys don't include the image version, and packages built on one
+  # OS release can't be reused on another. Images are pinned below rather than *-latest so they only change on purpose.
+  HASH_NUMBER : 2
 
 jobs: 
   tests:
     strategy:
       matrix:
         config:
-        - { name: lint-ubuntu-gcc,   os: ubuntu-latest,  compiler: gcc,          lint: true,  configurePreset: lint,            testPreset: tests }
-        - { name: lint-ubuntu-clang, os: ubuntu-latest,  compiler: llvm,         lint: true,  configurePreset: lint,            testPreset: tests  }
-        - { name: lint-windows,      os: windows-latest, compiler: msvc,         lint: false, configurePreset: debug-tests,     testPreset: tests   }
-        - { name: lint-macos,        os: macos-latest,   compiler: apple-clang,  lint: true,  configurePreset: lint,            testPreset: tests   }
-        - { name: sanitize-tsan,     os: ubuntu-latest,  compiler: llvm,         lint: false, configurePreset: sanitize-tsan,   testPreset: sanitize   }
-        - { name: sanitize-asan,     os: ubuntu-latest,  compiler: llvm,         lint: false, configurePreset: sanitize-asan,   testPreset: sanitize   }
-        - { name: sanitize-lsan,     os: ubuntu-latest,  compiler: llvm,         lint: false, configurePreset: sanitize-lsan,   testPreset: sanitize   }
-        - { name: sanitize-ubsan,    os: ubuntu-latest,  compiler: llvm,         lint: false, configurePreset: sanitize-ubsan,  testPreset: sanitize   }
+        - { name: lint-ubuntu-gcc,   os: ubuntu-26.04,  compiler: gcc,          lint: true,  configurePreset: lint,            testPreset: tests }
+        - { name: lint-ubuntu-clang, os: ubuntu-26.04,  compiler: llvm,         lint: true,  configurePreset: lint,            testPreset: tests  }
+        - { name: lint-windows,      os: windows-2025-vs2026, compiler: msvc,         lint: false, configurePreset: debug-tests,     testPreset: tests   }
+        - { name: lint-macos,        os: macos-26,        compiler: apple-clang,  lint: true,  configurePreset: lint,            testPreset: tests   }
+        - { name: sanitize-tsan,     os: ubuntu-26.04,  compiler: llvm,         lint: false, configurePreset: sanitize-tsan,   testPreset: sanitize   }
+        - { name: sanitize-asan,     os: ubuntu-26.04,  compiler: llvm,         lint: false, configurePreset: sanitize-asan,   testPreset: sanitize   }
+        - { name: sanitize-lsan,     os: ubuntu-26.04,  compiler: llvm,         lint: false, configurePreset: sanitize-lsan,   testPreset: sanitize   }
+        - { name: sanitize-ubsan,    os: ubuntu-26.04,  compiler: llvm,         lint: false, configurePreset: sanitize-ubsan,  testPreset: sanitize   }
 
     name: ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
@@ -57,7 +59,7 @@ jobs:
           key: ${{ runner.os }}-deps-tests--${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}-${{ env.HASH_NUMBER}}
 
       - name: Setup Cpp
-        if: ${{ matrix.config.os != 'windows-latest' }}
+        if: ${{ !startsWith(matrix.config.os, 'windows') }}
         uses: aminya/setup-cpp@v1
         with:
           compiler: ${{ matrix.config.compiler }}
@@ -95,7 +97,7 @@ jobs:
 
   coverage:
     name: Coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
     steps:

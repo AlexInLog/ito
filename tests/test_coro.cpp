@@ -1,6 +1,7 @@
 #include "common.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/trompeloeil.hpp>
 #include <ito/coro.hpp>
 #include <ito/exceptions.hpp>
@@ -255,4 +256,36 @@ TEST_CASE("nested co_await frees the child coroutine frame (no leak) even if sus
     };
 
     REQUIRE_THROWS_AS(ito::loop{}.run_until_complete(parent()), ito::exceptions::empty_value);
+}
+
+namespace
+{
+    struct throws_on_exit // NOLINT(cppcoreguidelines-special-member-functions)
+    {
+        // throwing on purpose: this is the case under test
+        ~throws_on_exit() noexcept(false) { throw std::runtime_error{"local's destructor threw"}; } // NOLINT(bugprone-unsafe-to-allow-exceptions)
+    };
+} // namespace
+
+TEST_CASE("an exception thrown after co_return replaces the returned value")
+{
+    // `co_return` sets the value first, then leaving the body destroys `guard`, whose destructor throws: the body
+    // didn't complete normally, so that exception is the result, not the value and not "value is already set"
+    auto body = []() -> ito::coro<int> {
+        throws_on_exit guard{};
+        co_return 42;
+    };
+
+    SECTION("awaited by run_until_complete")
+    {
+        // matched by message: ito's own exceptions (value_is_set included) derive from std::runtime_error too
+        REQUIRE_THROWS_WITH(ito::loop{}.run_until_complete(body()), "local's destructor threw");
+    }
+    SECTION("awaited by another coroutine")
+    {
+        REQUIRE_THROWS_WITH(ito::loop{}.run_until_complete([&]() -> ito::coro<int> {
+            co_return co_await body();
+        }()),
+                            "local's destructor threw");
+    }
 }
