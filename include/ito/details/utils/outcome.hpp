@@ -40,6 +40,7 @@ namespace ito::details::utils
     template<typename T>
     class outcome
     {
+        using moved_out_t = std::void_t;
     public:
         using stored_t = std::conditional_t<std::is_void_v<T>, void_t, T>;
 
@@ -54,7 +55,7 @@ namespace ito::details::utils
         // would throw value_is_set out of unhandled_exception(), and so out of resume().
         void replace_with_exception(const std::exception_ptr& err) { m_value.template emplace<2>(err); }
 
-        [[nodiscard]] bool is_ready() const { return !m_value.valueless_by_exception() && m_value.index() != 0; }
+        [[nodiscard]] bool is_ready() const { return !m_value.valueless_by_exception() && (m_value.index() == 1 || m_value.index() == 2) ; }
 
         void set_result()
             requires (std::is_void_v<T>)
@@ -81,7 +82,7 @@ namespace ito::details::utils
         // after the value has been moved into the return object, or while the stored exception unwinds.
         T get_result()
         {
-            const auto _ = finally{[this]() noexcept { m_value.template emplace<0>(); }};
+            const auto _ = finally{[this]() noexcept { m_value.template emplace<3>(); }};
 
             // Deliberately not std::visit(): visiting dispatches through a function table, which neither
             // compiler manages to fold away, while this is the hot path of every awaited future.
@@ -104,6 +105,6 @@ namespace ito::details::utils
         }
 
     private:
-        std::variant<std::monostate, stored_t, std::exception_ptr> m_value{};
+        std::variant<std::monostate, stored_t, std::exception_ptr, moved_out_t> m_value{};
     };
 } // namespace ito::details::utils
