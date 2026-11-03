@@ -40,7 +40,7 @@ namespace ito::details::utils
     template<typename T>
     class outcome
     {
-        using moved_out_t = std::void_t;
+        using moved_out_t = void_t;
     public:
         using stored_t = std::conditional_t<std::is_void_v<T>, void_t, T>;
 
