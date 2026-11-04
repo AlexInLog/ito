@@ -95,7 +95,7 @@ namespace ito::details::utils
             m_value.template emplace<1>(v);
         }
 
-        // Hands the result out once and marks the outcome as taken on every path: the anchor does so after the value
+        // Hands the result out once and marks the outcome as taken on every path: the guard does so after the value
         // has been moved into the return object, or while the stored exception unwinds.
         T get_result()
         {

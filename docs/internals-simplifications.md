@@ -55,7 +55,7 @@ public:
 ```
 
 - `anchor` is not a template: it holds no `T`, and its back-pointer goes to the non-template `anchor_link`. Code that
-  only holds a anchor (awaitables, `task`, `run_until_complete`) doesn't spell out `T`. A nested `anchored<T>::anchor`
+  only holds an anchor (awaitables, `task`, `run_until_complete`) doesn't spell out `T`. A nested `anchored<T>::anchor`
   would also work, but it would make `anchored<A>::anchor` and `anchored<B>::anchor` distinct types for no reason.
 - `anchored<T>` copies the `std::coroutine_handle<>`. That's fine: a handle is one pointer to a frame whose address
   never changes. Safety comes from the alive check before resuming, not from where the handle is stored. The bug
@@ -74,7 +74,7 @@ The anchor must be dead whenever the frame is destroyed. The current placements 
   unwind;
 - `task`: the anchor sits next to the `raii_coroutine_handle` that destroys the frame.
 
-Putting a anchor somewhere that can outlive the frame breaks it. `trackable` has the same invariant today (the owner
+Putting an anchor somewhere that can outlive the frame breaks it. `trackable` has the same invariant today (the owner
 must die with the frame); it just isn't stated anywhere.
 
 ### Order

@@ -263,19 +263,17 @@ namespace
     struct throws_on_exit // NOLINT(cppcoreguidelines-special-member-functions)
     {
         // throwing on purpose: this is the case under test
-        ~throws_on_exit() noexcept(false)
-        {
-            throw std::runtime_error{"local's destructor threw"};
-        } // NOLINT(bugprone-unsafe-to-allow-exceptions)
+        // NOLINTNEXTLINE(bugprone-unsafe-to-allow-exceptions)
+        ~throws_on_exit() noexcept(false) { throw std::runtime_error{"local's destructor threw"}; }
     };
 } // namespace
 
 TEST_CASE("an exception thrown after co_return replaces the returned value")
 {
-    // `co_return` sets the value first, then leaving the body destroys `anchor`, whose destructor throws: the body
+    // `co_return` sets the value first, then leaving the body destroys `guard`, whose destructor throws: the body
     // didn't complete normally, so that exception is the result, not the value and not "value is already set"
     auto body = []() -> ito::coro<int> {
-        throws_on_exit anchor{};
+        throws_on_exit guard{};
         co_return 42;
     };
 

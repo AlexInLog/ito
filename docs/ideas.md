@@ -17,7 +17,7 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
   and none of the current benchmarks create one, so that path is unmeasured.
 - **`trackable` is single-threaded by design:** one non-atomic back-pointer, re-pointed on every move. Anything
   multi-threaded will need a different lifetime-tracking scheme.
-- **Destroying a task from inside its own body** isn't anchored: the frame would be destroyed while it's running.
+- **Destroying a task from inside its own body** isn't guarded: the frame would be destroyed while it's running.
 - **Callbacks that capture by reference can dangle:** a `call_soon` callback may run after the coroutine that queued
   it has finished, later in the same run or in the next one. The loop can't see what a callable references, so this
   is a documented contract rather than a check. Callbacks are stored as `move_only_callback`, so the safe form

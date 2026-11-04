@@ -72,14 +72,14 @@ Repo: https://github.com/AlexInLog/ito
 ## Known gotchas
 
 - `coro<T>` previously had a double-await UB bug. The fix requires coordinating `std::exchange` with an
-  `utils::finally`-anchored `.destroy()` call inside the awaitable — if you touch await/destroy logic in `coro<T>`,
+  `utils::finally`-guarded `.destroy()` call inside the awaitable — if you touch await/destroy logic in `coro<T>`,
   re-check this invariant carefully rather than assuming a simpler fix is safe.
 - Coverage tooling (llvm-cov + SonarQube) has known false positives on branch merging for template instantiations —
   this is an upstream LLVM issue (llvm/llvm-project#93843, #111743, #119299), not a bug in this codebase. Don't "fix"
   coverage gaps that trace back to this.
 - `promise<T>`'s destructor schedules a resume via `loop::try_current()` (not `loop::current()`) specifically because
   it must stay `noexcept`-safe — if you touch that destructor, don't switch it back to the throwing lookup.
-  Double-scheduling a resume (UB) is anchored by `future_state<T>::schedule_continuation()` clearing `continuation`
+  Double-scheduling a resume (UB) is guarded by `future_state<T>::schedule_continuation()` clearing `continuation`
   the instant a resume is scheduled, not by checking `is_ready()` — if you change how `continuation` is consumed, make
   sure whatever claims it still clears it in the same step, or a promise resolved and destroyed in quick succession
   will double-schedule its awaiter's resume. It clears it only after `call_soon()` succeeded: if queuing throws, the
@@ -122,7 +122,7 @@ Repo: https://github.com/AlexInLog/ito
 
 - Formatted with `clang-format` (WebKit-based, 4-space indent, 140-column limit); `clangd` configured with inlay
   hints enabled.
-- Header anchor: `#pragma once` everywhere, not `#ifndef` anchors.
+- Header guard: `#pragma once` everywhere, not `#ifndef` guards.
 - Include ordering is enforced by clang-format (`IncludeBlocks: Regroup`): quoted includes first, then
   `<doctest|nanobench>`, then other extension-bearing angle includes, then plain system headers
   (`SortIncludes: CaseSensitive`).
