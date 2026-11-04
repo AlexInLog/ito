@@ -1,8 +1,7 @@
 # Ideas and open issues
 
 Working notes on what to build next and what's still known to be rough. The [README roadmap](../README.md#roadmap)
-is the short public checklist; this file keeps the reasoning behind it. Planned refactors of the internals are in
-[internals-simplifications.md](internals-simplifications.md).
+is the short public checklist; this file keeps the reasoning behind it.
 
 ## Open issues
 
@@ -10,13 +9,21 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
   it sleeps, so it never waits on a dead deadline. Entries further down keep their memory until they surface.
   Removing them on cancel needs each sleep to know its heap position, which an intrusive timer node would give
   (see below).
-- **Timer heap entries are `weak_ref`s:** every sift during `push_heap`/`pop_heap` moves a `weak_ref`, and each
-  move writes a back-pointer into another coroutine's frame. Fine at today's scale, but it's a cache miss per
-  swap.
+- **Timer heap entries are `anchored` handles:** every sift during `push_heap`/`pop_heap` moves an entry, and each
+  move writes a back-pointer into the anchor in another coroutine's frame. Fine at today's scale, but it's a cache
+  miss per swap.
 - **No benchmark with active timers:** the loop calls `steady_clock::now()` once per tick only when timers exist,
   and none of the current benchmarks create one, so that path is unmeasured.
-- **`trackable` is single-threaded by design:** one non-atomic back-pointer, re-pointed on every move. Anything
-  multi-threaded will need a different lifetime-tracking scheme.
+- **`linked` (behind `trackable` and `anchored`) is single-threaded by design:** non-atomic back-pointers, re-pointed
+  on every move. Anything multi-threaded will need a different lifetime-tracking scheme (see the multi-threading step
+  below).
+- **Resolving a future before it's awaited sits on an inlining threshold:** moving queued resumes to `anchored`
+  (which carries the handle in the queue entry) raised `promise_base::set_result_impl`'s inline cost from 240 to 255,
+  just over clang's 250, and `bm_resolve_future_before_await` went from 11.8 to 16.6 ns (211 to 297 instructions).
+  The extra work itself is one pointer move; the rest is lost inlining, which the old code only got because clang
+  could prove the future was never awaited and fold the scheduling away. Splitting the wake path out of line fixed it
+  but needs a compiler-specific `noinline`; creating the link only at wake time didn't help. Not chased further: the
+  intrusive ready queue (next steps) changes this path anyway.
 - **Destroying a task from inside its own body** isn't guarded: the frame would be destroyed while it's running.
 - **Callbacks that capture by reference can dangle:** a `call_soon` callback may run after the coroutine that queued
   it has finished, later in the same run or in the next one. The loop can't see what a callable references, so this
@@ -44,11 +51,16 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
 
 ## Next steps
 
-Rough order. The cleanup comes first because it's small and leaves a simpler base; cancellation comes next because
-its answer shapes most of the others.
+Rough order. The intrusive ready queue comes first because it reshapes how the loop holds suspended coroutines;
+cancellation comes next because its answer shapes most of the others.
 
-1. **Internal cleanup:** `anchored<T>`, as a behavior-preserving PR. Plan in
-   [internals-simplifications.md](internals-simplifications.md).
+1. **Intrusive ready queue:** each suspended awaiter is its own queue node, a doubly-linked node embedded in the
+   awaitable (so in the coroutine frame). Queuing links the node; cancelling is the node unlinking itself in its
+   destructor, in O(1). That removes `anchored`/`anchor` for queued resumes (the node's lifetime is the frame's
+   lifetime), the `deque`, and the per-entry allocation. Callbacks need a heap node holding their
+   `move_only_callback`. Timers want the same treatment (an intrusive heap or a timer wheel), which also fixes the
+   cancelled-timers-deeper-in-the-heap issue. Open design points: who owns callback nodes, keeping the per-tick
+   batching, and how it carries over to multi-threading.
 2. **Cooperative cancellation and structured concurrency:** today, cancelling means destroying the frame. That stops
    working once I/O arrives: with io_uring the kernel holds pointers into your buffers until the CQE lands, so a
    frame with a read in flight can't just be destroyed. It needs a stop signal the operation observes, an
@@ -56,13 +68,17 @@ its answer shapes most of the others.
    aggregation), `when_any` (cancelling the losers), task groups, and timeouts.
 3. **Single-threaded sync primitives:** `event`, `mutex`, `semaphore`, `channel<T>`. Each is small, and each pushes
    towards intrusive waiter lists, where the node lives in the awaiter and unlinks itself on cancellation. The same
-   design could replace the `deque<variant<..., move_only_callback>>` ready queue and the `trackable`-based timer heap,
-   and would likely address the first three open issues.
-4. **Allocation work:** a per-loop frame pool via `promise_type::operator new` and an intrusive ready queue,
-   measured with the existing CodSpeed setup.
+   intrusive node design as the ready queue applies to their waiter lists.
+4. **Allocation work:** a per-loop frame pool via `promise_type::operator new`, measured with the existing CodSpeed
+   setup.
 5. **Reactor:** epoll first as a baseline, then io_uring. Timers become the `epoll_wait` timeout or
    `IORING_OP_TIMEOUT` and replace `std::this_thread::sleep_until`.
 6. **Multi-threading:** `call_soon_threadsafe` with an eventfd wakeup, then a Chase-Lev work-stealing scheduler.
-   This is where `trackable` has to be redesigned, which is another reason to settle cancellation first.
+   This is where `linked` (behind `trackable` and `anchored`) has to be redesigned: its moves patch a non-atomic
+   back-pointer on the other end, so an anchor in a task dropped on one thread and its queued handle stolen by another
+   would race. The likely replacement for queued resumes is a strong ref in the queue plus a cancelled bit and a
+   refcount in the frame header: the popper sees the bit and destroys the frame without resuming it. The cost is that
+   cancelled frames live until the scheduler reaches them, and their locals are destroyed on the scheduler's thread.
+   `future_state` would move to atomic shared state separately. Another reason to settle cancellation first.
 
 Smaller side projects: `async_generator<T>`, `coro<T&>` support, interop with P2300 `std::execution` senders.

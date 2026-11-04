@@ -56,10 +56,15 @@ Repo: https://github.com/AlexInLog/ito
   `call_soon` tick, independent of whether/when it's `co_await`ed. Destroying the `task<T>` before it's awaited
   cancels it (the underlying coroutine handle is destroyed, so the body may never run past its next suspend point).
 - `details::utils::trackable<T>` — pairs an owning object with a single `weak_ref` that gets nulled out when the
-  owner is destroyed or moved-from. Used for `future_state<T>` (shared by `promise`/`future`) and for every queued
-  coroutine resume (`task<T>` starts, sleeps, future continuations, `run_until_complete`), so the loop skips a resume
-  whose frame was destroyed while it was queued. A reversed variant for the queued resumes, `anchored<T>`, is planned
-  (`docs/internals-simplifications.md`).
+  owner is destroyed or moved-from. Used for `future_state<T>` (shared by `promise`/`future`).
+- `details::utils::anchored<T>`/`anchor` — the reverse: the value travels with the `anchored<T>`, and `get()` returns
+  it only while its `anchor` exists. Every queued coroutine resume is an `anchored<std::coroutine_handle<>>`
+  (`details::queued_resume`), anchored to the frame it resumes, so the loop skips a resume whose frame was destroyed
+  while it was queued.
+- Both are built on `details::utils::linked<Tag, Side>` (`link_owner`/`link_follower`): an intrusive two-ended link
+  where each kind of link has its own tag. The two ends and different kinds of links are distinct types on purpose, so
+  clang's type-based alias analysis can keep the pointers in registers; one symmetric type cost ~3x the instructions on
+  the create/move/use path (see the comment in `linked.hpp`).
 - `details::utils::outcome<T>` — the set-once result slot (`variant<monostate, T, exception_ptr, moved_out_t>`) behind
   both `coro<T>` promises and `future_state<T>`. `get_result()` returns `T` and marks the slot as taken (`moved_out_t`,
   distinct from `monostate`, which means never set), so a result can only be taken once: a second call reports "value
@@ -84,10 +89,11 @@ Repo: https://github.com/AlexInLog/ito
   sure whatever claims it still clears it in the same step, or a promise resolved and destroyed in quick succession
   will double-schedule its awaiter's resume. It clears it only after `call_soon()` succeeded: if queuing throws, the
   awaiter stays registered so the promise's destructor can still deliver the result, rather than being lost.
-- Every loop queue entry that resumes a coroutine which can be cancelled (task frames) must be a `weak_ref`, not a
-  raw `std::coroutine_handle<>`: destroying a `task<T>` destroys its frame at whatever suspend point it's at, and a
-  raw handle queued before that would resume freed memory. `future<T>`'s awaitable and `sleep_awaitable` both own a
-  `trackable<std::coroutine_handle<>>` for this reason.
+- Every loop queue entry that resumes a coroutine must be a `details::queued_resume` (`anchored<coroutine_handle<>>`),
+  never a raw `std::coroutine_handle<>`: destroying a `task<T>` destroys its frame at whatever suspend point it's at,
+  and a raw handle queued before that would resume freed memory. The matching `anchor` must be dead whenever that
+  frame is destroyed: it lives in the frame (`future<T>`'s and `sleep_awaitable`'s awaitables) or next to whatever
+  destroys it (`task<T>` and its awaitable hold the frame's `raii_coroutine_handle` and the anchor side by side).
 - Exception policy: `loop::call_soon` only accepts coroutine entries or nothrow-invocable callbacks
   (`details::loop_handle`/`details::loop_callback`). Errors travel through coroutines and promises, never out of a
   callback: nobody awaits a callback, so a throw would unwind an unrelated `run_until_complete()`. The check is
@@ -95,8 +101,8 @@ Repo: https://github.com/AlexInLog/ito
   Callbacks are stored as `details::utils::move_only_callback`, not `std::function`, so they can own move-only state:
   the loop can't see what a callback references, and one queued by a coroutine may run after that coroutine is gone,
   so callbacks should own what they touch (e.g. capture a promise by move) rather than capture frame locals by `&`.
-  `run_until_complete` still queues its coroutine as a `weak_ref`, because allocation failure inside the loop can
-  still unwind it.
+  `run_until_complete` still queues its coroutine as a `queued_resume`, because allocation failure inside the loop
+  can still unwind it.
 - Capturing coroutine lambdas: a lambda's captures live in its closure object, not in the coroutine frame, so a
   temporary closure dies at the end of the statement that called it. `run_until_complete([&]() -> coro<> {...}())` is
   safe, because the statement only ends after the run. `create_task([&]() -> coro<> {...}())` is not: the task runs
