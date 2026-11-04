@@ -1,12 +1,21 @@
 #pragma once
 
+#include <ito/details/utils/linked.hpp>
+
 #include <concepts>
 #include <utility>
 
 namespace ito::details::utils
 {
+    // Owns a T and pairs it with a single weak_ref: the trackable is the link_owner, its weak_ref the link_follower (see
+    // linked.hpp). Moving either end re-points the other, and destroying the owner makes the weak_ref see nothing. No
+    // special members are declared on purpose (rule of zero): the defaulted ones move the link (which re-points) and T as
+    // usual, and copying is deleted through the link.
+
+    struct trackable_link_tag;
+
     template<typename T>
-    class trackable
+    class trackable : private link_owner<trackable_link_tag>
     {
         struct inplace
         {
@@ -20,82 +29,29 @@ namespace ito::details::utils
         }
 
     public:
-        ~trackable() noexcept
-        {
-            if (m_view)
-                m_view->m_object = nullptr;
-        }
-
-        trackable(trackable&& o) noexcept
-            : m_object(std::move(o.m_object))
-            , m_view(std::exchange(o.m_view, nullptr))
-        {
-            if (m_view)
-                m_view->m_object = this;
-        }
-
-        trackable(const trackable&)            = delete;
-        trackable& operator=(const trackable&) = delete;
-        trackable& operator=(trackable&& o) noexcept
-        {
-            m_object = std::move(o.m_object);
-            if (m_view)
-                m_view->m_object = nullptr;
-
-            m_view = std::exchange(o.m_view, nullptr);
-            if (m_view)
-                m_view->m_object = this;
-
-            return *this;
-        }
-
         [[nodiscard]] T&       get() { return m_object; }
         [[nodiscard]] const T& get() const { return m_object; }
         [[nodiscard]] T*       operator->() { return &m_object; }
         [[nodiscard]] const T* operator->() const { return &m_object; }
 
-        class weak_ref
+        class weak_ref : private link_follower<trackable_link_tag>
         {
-            explicit weak_ref(trackable<T>& object)
-                : m_object{&object}
+            // As a nested class, weak_ref may convert a trackable to its private `linked` base and back.
+            explicit weak_ref(trackable& object)
+                : link_follower<trackable_link_tag>{static_cast<link_owner<trackable_link_tag>&>(object)}
             {
-                m_object->m_view = this;
             }
 
         public:
             friend class trackable<T>;
 
-            ~weak_ref() noexcept
+            // cppcheck doesn't resolve other() through the templated link_follower base and calls this static-able
+            // cppcheck-suppress functionStatic
+            [[nodiscard]] T* get() const
             {
-                if (m_object)
-                    m_object->m_view = nullptr;
+                auto* const owner = static_cast<trackable*>(this->other());
+                return owner ? &owner->get() : nullptr;
             }
-
-            weak_ref(weak_ref&& o) noexcept
-                : m_object(std::exchange(o.m_object, nullptr))
-            {
-                if (m_object)
-                    m_object->m_view = this;
-            }
-
-            weak_ref(const weak_ref&)            = delete;
-            weak_ref& operator=(const weak_ref&) = delete;
-            weak_ref& operator=(weak_ref&& o) noexcept
-            {
-                if (m_object)
-                    m_object->m_view = nullptr;
-
-                m_object = std::exchange(o.m_object, nullptr);
-                if (m_object)
-                    m_object->m_view = this;
-
-                return *this;
-            }
-
-            [[nodiscard]] T* get() const { return m_object ? &m_object->get() : nullptr; }
-
-        private:
-            trackable<T>* m_object{};
         };
 
         template<typename... Args>
@@ -109,7 +65,6 @@ namespace ito::details::utils
         }
 
     private:
-        T         m_object;
-        weak_ref* m_view{};
+        T m_object;
     };
 } // namespace ito::details::utils
