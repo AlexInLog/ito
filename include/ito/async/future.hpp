@@ -29,17 +29,17 @@ namespace ito::async
             ito::details::utils::outcome<T> value{};
             // The awaiting coroutine's resume, anchored to its frame (the anchor lives in the awaitable) rather than a
             // raw handle: once scheduled, the loop skips the resume if that frame was destroyed meanwhile.
-            std::optional<ito::details::queued_resume> continuation{};
+            // Empty (get() returns null) until a coroutine awaits, and again once its resume is queued.
+            ito::details::queued_resume continuation{};
 
             // Queues the awaiting coroutine's resume and clears `continuation` in the same step, so it can never be
             // scheduled twice. call_soon() has no effect if it throws, so on failure `continuation` stays registered
-            // and a later attempt (the promise's destructor) can still deliver the result.
+            // and a later attempt (the promise's destructor) can still deliver the result. Callers check that a
+            // continuation is set: it keeps this out of the resolve path's inlining budget twice.
             void schedule_continuation(ito::loop& loop)
             {
-                if (!continuation) [[unlikely]]
-                    return;
-                loop.call_soon(std::move(*continuation));
-                continuation.reset();
+                // the moved-from continuation is empty, so moving it into the queue clears it in the same step
+                loop.call_soon(std::move(continuation));
             }
         };
 
@@ -78,9 +78,11 @@ namespace ito::async
             {
                 if (const auto ptr = m_value.get())
                 {
-                    auto prepared = this->prepare_scheduling_continuation();
+                    // looked up before the value changes, so a missing loop throws before anything is set
+                    const auto loop = ptr->continuation.get() ? &ito::loop::current() : nullptr;
                     ptr->value.set_result(std::forward<TT>(v)...);
-                    prepared();
+                    if (loop)
+                        ptr->schedule_continuation(*loop);
                 }
             }
 
@@ -88,9 +90,10 @@ namespace ito::async
             {
                 if (const auto ptr = m_value.get())
                 {
-                    auto prepared = this->prepare_scheduling_continuation();
+                    const auto loop = ptr->continuation.get() ? &ito::loop::current() : nullptr;
                     ptr->value.set_exception(err);
-                    prepared();
+                    if (loop)
+                        ptr->schedule_continuation(*loop);
                 }
             }
 
@@ -131,7 +134,7 @@ namespace ito::async
                     }
                 }
 
-                if (!ptr->continuation) [[likely]]
+                if (!ptr->continuation.get()) [[likely]]
                     return;
 
                 if (const auto loop = ito::loop::try_current()) [[likely]]
@@ -148,15 +151,6 @@ namespace ito::async
                         // nothing sensible to do with a failed best-effort notification here
                     }
                 }
-            }
-            [[nodiscard]] auto prepare_scheduling_continuation()
-            {
-                // we are doing it as lambda to try to catch loop BEFORE actual value changes so crash would happen BEFORE
-                const auto ptr = m_value.get();
-                return [loop = ptr && ptr->continuation ? &ito::loop::current() : nullptr, ptr]() {
-                    if (loop) [[likely]]
-                        ptr->schedule_continuation(*loop);
-                };
             }
 
         private:
@@ -183,7 +177,7 @@ namespace ito::async
                 {
                 }
 
-                ~awaitable() noexcept { obj->continuation.reset(); }
+                ~awaitable() noexcept { obj->continuation = {}; }
 
                 awaitable(const awaitable&)            = delete;
                 awaitable& operator=(const awaitable&) = delete;
@@ -197,7 +191,7 @@ namespace ito::async
                 {
                     auto [resume, anchor] = ito::details::queued_resume::create(h);
                     frame_anchor.emplace(std::move(anchor));
-                    obj->continuation.emplace(std::move(resume));
+                    obj->continuation = std::move(resume);
                 }
 
                 T await_resume() { return obj->value.get_result(); }

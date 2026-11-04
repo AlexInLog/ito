@@ -17,13 +17,13 @@ is the short public checklist; this file keeps the reasoning behind it.
 - **`linked` (behind `trackable` and `anchored`) is single-threaded by design:** non-atomic back-pointers, re-pointed
   on every move. Anything multi-threaded will need a different lifetime-tracking scheme (see the multi-threading step
   below).
-- **Resolving a future before it's awaited sits on an inlining threshold:** moving queued resumes to `anchored`
-  (which carries the handle in the queue entry) raised `promise_base::set_result_impl`'s inline cost from 240 to 255,
-  just over clang's 250, and `bm_resolve_future_before_await` went from 11.8 to 16.6 ns (211 to 297 instructions).
-  The extra work itself is one pointer move; the rest is lost inlining, which the old code only got because clang
-  could prove the future was never awaited and fold the scheduling away. Splitting the wake path out of line fixed it
-  but needs a compiler-specific `noinline`; creating the link only at wake time didn't help. Not chased further: the
-  intrusive ready queue (next steps) changes this path anyway.
+- **The promise's resolve path sits just under clang's inlining threshold:** `promise_base::set_result_impl` has an
+  inline cost of 245 against a threshold of 250. If it goes over, it stops being inlined and the future benchmarks
+  jump (resolving before await went from 211 to 297 instructions, +4.9 ns, during the `anchored` migration). It was
+  brought back under by dropping a redundant continuation check and by making the continuation a plain
+  `queued_resume` (empty when unset), so queuing it needs no `reset()` of a moved-from optional; the throwing
+  `loop::current()` lookup is the biggest single cost in there. When changing that path, check
+  `-Rpass-missed=inline` for `set_result_impl` and compare instruction counts (`perf stat -e instructions:u`).
 - **Destroying a task from inside its own body** isn't guarded: the frame would be destroyed while it's running.
 - **Callbacks that capture by reference can dangle:** a `call_soon` callback may run after the coroutine that queued
   it has finished, later in the same run or in the next one. The loop can't see what a callable references, so this

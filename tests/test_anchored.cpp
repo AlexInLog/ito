@@ -35,6 +35,20 @@ TEST_CASE("anchored value is usable only while its anchor exists")
     }
 }
 
+TEST_CASE("a default-constructed anchored is empty")
+{
+    anchored<int> empty{};
+    REQUIRE(empty.get() == nullptr);
+
+    SECTION("move-assigning a linked value into it links it")
+    {
+        auto [value, anchor_end] = anchored<int>::create(5);
+        empty                    = std::move(value);
+        REQUIRE(empty.get() != nullptr);
+        REQUIRE(*empty.get() == 5);
+    }
+}
+
 TEST_CASE("anchored keeps its link across moves")
 {
     SECTION("moving the value re-points the link")

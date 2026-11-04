@@ -87,8 +87,11 @@ Repo: https://github.com/AlexInLog/ito
   Double-scheduling a resume (UB) is guarded by `future_state<T>::schedule_continuation()` clearing `continuation`
   the instant a resume is scheduled, not by checking `is_ready()` — if you change how `continuation` is consumed, make
   sure whatever claims it still clears it in the same step, or a promise resolved and destroyed in quick succession
-  will double-schedule its awaiter's resume. It clears it only after `call_soon()` succeeded: if queuing throws, the
-  awaiter stays registered so the promise's destructor can still deliver the result, rather than being lost.
+  will double-schedule its awaiter's resume. `continuation` is a plain `queued_resume` (empty, `get()` null, when
+  unset): `call_soon(std::move(continuation))` clears it by moving it, and only if queuing succeeds, since
+  `call_soon()` has no effect if it throws. So on failure the awaiter stays registered and the promise's destructor
+  can still deliver the result, rather than it being lost. Callers check `continuation.get()` before calling, and this
+  path is inlining-sensitive (see `docs/ideas.md`).
 - Every loop queue entry that resumes a coroutine must be a `details::queued_resume` (`anchored<coroutine_handle<>>`),
   never a raw `std::coroutine_handle<>`: destroying a `task<T>` destroys its frame at whatever suspend point it's at,
   and a raw handle queued before that would resume freed memory. The matching `anchor` must be dead whenever that

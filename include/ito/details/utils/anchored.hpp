@@ -36,6 +36,9 @@ namespace ito::details::utils
         }
 
     public:
+        // An empty value, linked to no anchor: get() returns null, as for a moved-from one.
+        anchored() = default;
+
         static_assert(std::is_nothrow_move_constructible_v<T>, "T should be nothrow movable inside anchored");
 
         template<typename... Args>
@@ -52,6 +55,6 @@ namespace ito::details::utils
         [[nodiscard]] T* get() noexcept { return this->other() ? &m_value : nullptr; }
 
     private:
-        T m_value;
+        T m_value{};
     };
 } // namespace ito::details::utils
