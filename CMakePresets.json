@@ -30,7 +30,8 @@
             "hidden": true,
             "inherits": "base",
             "cacheVariables": {
-                "ITO_BUILD_TESTS": "ON"
+                "ITO_BUILD_TESTS": "ON",
+                "ITO_BUILD_EXAMPLES": "ON"
             }
         },
 

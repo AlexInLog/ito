@@ -1,0 +1,6 @@
+---
+InheritParentConfig: true
+# The examples pass coroutines references to state owned by the coroutine that awaits them (or holds their task), so
+# the referenced object outlives the callee. The check flags every reference parameter regardless.
+Checks:
+    - '-cppcoreguidelines-avoid-reference-coroutine-parameters'

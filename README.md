@@ -126,6 +126,17 @@ int main()
 }
 ```
 
+### More examples
+
+[`examples/`](examples) has two small programs:
+
+- `sleep_sort.cpp` sorts numbers by turning each one into a task that sleeps in proportion to its value.
+- `downloads.cpp` draws progress bars for a few fake downloads running at once, and cancels the one that's still
+  running at the deadline by destroying its task.
+
+The presets that build the tests (`lint`, `release-tests`, `debug-tests`, the sanitizer presets) also build the
+examples and run them as tests: each one checks its own result and exits non-zero if it's wrong.
+
 ## Roadmap
 
 - [ ] Work-stealing multi-threaded scheduler
@@ -158,8 +169,9 @@ Useful CMake options:
 
 | Option                | Default | Description                     |
 |------------------------|---------|----------------------------------|
-| `ITO_BUILD_TESTS`      | `ON`    | Build the test suite            |
-| `ITO_BUILD_BENCHMARKS` | `ON`    | Build the benchmark suite       |
+| `ITO_BUILD_TESTS`      | `OFF`   | Build the test suite            |
+| `ITO_BUILD_BENCHMARKS` | `OFF`   | Build the benchmark suite       |
+| `ITO_BUILD_EXAMPLES`   | `OFF`   | Build the examples              |
 
 Requires a C++20-capable compiler.
 
