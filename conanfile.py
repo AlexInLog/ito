@@ -21,7 +21,6 @@ class ItoConan(ConanFile):
         if self.options.with_tests:
             self.requires("catch2/3.15.1")
             self.requires("trompeloeil/49")
- 
+
     def layout(self):
         cmake_layout(self)
-        

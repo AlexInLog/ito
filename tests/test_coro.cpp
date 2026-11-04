@@ -263,7 +263,8 @@ namespace
     struct throws_on_exit // NOLINT(cppcoreguidelines-special-member-functions)
     {
         // throwing on purpose: this is the case under test
-        ~throws_on_exit() noexcept(false) { throw std::runtime_error{"local's destructor threw"}; } // NOLINT(bugprone-unsafe-to-allow-exceptions)
+        // NOLINTNEXTLINE(bugprone-unsafe-to-allow-exceptions)
+        ~throws_on_exit() noexcept(false) { throw std::runtime_error{"local's destructor threw"}; }
     };
 } // namespace
 
@@ -283,9 +284,11 @@ TEST_CASE("an exception thrown after co_return replaces the returned value")
     }
     SECTION("awaited by another coroutine")
     {
-        REQUIRE_THROWS_WITH(ito::loop{}.run_until_complete([&]() -> ito::coro<int> {
-            co_return co_await body();
-        }()),
-                            "local's destructor threw");
+        REQUIRE_THROWS_WITH(
+            ito::loop{}.run_until_complete([&]() -> ito::coro<int> {
+                co_return co_await body();
+            }()),
+            "local's destructor threw"
+        );
     }
 }

@@ -10,8 +10,7 @@ target_link_libraries(ito_benchmarks
 )
 
 # target_compile_options(ito_benchmarks PRIVATE -Wno-c2y-extensions)
-set_target_properties(ito_benchmarks PROPERTIES 
-    C_CLANG_TIDY "" 
+set_target_properties(ito_benchmarks PROPERTIES
+    C_CLANG_TIDY ""
     CXX_CLANG_TIDY ""
 )
-

@@ -46,7 +46,7 @@ Repo: https://github.com/AlexInLog/ito
 
 - `coro<T>` — the base coroutine type: lazily-started, single-owner (`initial_suspend` = always suspend).
 - `promise<T>`/`future<T>` — `std::promise`/`std::future`-style split, created together via `promise<T>::create()`.
-  Both sides are backed by a shared `trackable<future_state<T>>`/`weak_view` pair (see
+  Both sides are backed by a shared `trackable<future_state<T>>`/`weak_ref` pair (see
   `details::utils::trackable`), so either side can be destroyed independently without dangling the other:
   destroying the `future` while a coroutine hasn't yet awaited it is a no-op; destroying the `promise` while a
   coroutine is suspended `co_await`ing its `future` delivers `exceptions::broken_future` to that coroutine instead
@@ -55,10 +55,10 @@ Repo: https://github.com/AlexInLog/ito
 - `task<T>` — created via `loop::create_task(coro<T>&&)`; the loop schedules it to start running on the next
   `call_soon` tick, independent of whether/when it's `co_await`ed. Destroying the `task<T>` before it's awaited
   cancels it (the underlying coroutine handle is destroyed, so the body may never run past its next suspend point).
-- `details::utils::trackable<T>` — pairs an owning object with a single `weak_view` that gets nulled out when the
+- `details::utils::trackable<T>` — pairs an owning object with a single `weak_ref` that gets nulled out when the
   owner is destroyed or moved-from. Used for `future_state<T>` (shared by `promise`/`future`) and for every queued
   coroutine resume (`task<T>` starts, sleeps, future continuations, `run_until_complete`), so the loop skips a resume
-  whose frame was destroyed while it was queued. A reversed variant for the queued resumes, `guarded<T>`, is planned
+  whose frame was destroyed while it was queued. A reversed variant for the queued resumes, `anchored<T>`, is planned
   (`docs/internals-simplifications.md`).
 - `details::utils::outcome<T>` — the set-once result slot (`variant<monostate, T, exception_ptr, moved_out_t>`) behind
   both `coro<T>` promises and `future_state<T>`. `get_result()` returns `T` and marks the slot as taken (`moved_out_t`,
@@ -84,7 +84,7 @@ Repo: https://github.com/AlexInLog/ito
   sure whatever claims it still clears it in the same step, or a promise resolved and destroyed in quick succession
   will double-schedule its awaiter's resume. It clears it only after `call_soon()` succeeded: if queuing throws, the
   awaiter stays registered so the promise's destructor can still deliver the result, rather than being lost.
-- Every loop queue entry that resumes a coroutine which can be cancelled (task frames) must be a `weak_view`, not a
+- Every loop queue entry that resumes a coroutine which can be cancelled (task frames) must be a `weak_ref`, not a
   raw `std::coroutine_handle<>`: destroying a `task<T>` destroys its frame at whatever suspend point it's at, and a
   raw handle queued before that would resume freed memory. `future<T>`'s awaitable and `sleep_awaitable` both own a
   `trackable<std::coroutine_handle<>>` for this reason.
@@ -95,7 +95,7 @@ Repo: https://github.com/AlexInLog/ito
   Callbacks are stored as `details::utils::move_only_callback`, not `std::function`, so they can own move-only state:
   the loop can't see what a callback references, and one queued by a coroutine may run after that coroutine is gone,
   so callbacks should own what they touch (e.g. capture a promise by move) rather than capture frame locals by `&`.
-  `run_until_complete` still queues its coroutine as a `weak_view`, because allocation failure inside the loop can
+  `run_until_complete` still queues its coroutine as a `weak_ref`, because allocation failure inside the loop can
   still unwind it.
 - Capturing coroutine lambdas: a lambda's captures live in its closure object, not in the coroutine frame, so a
   temporary closure dies at the end of the statement that called it. `run_until_complete([&]() -> coro<> {...}())` is

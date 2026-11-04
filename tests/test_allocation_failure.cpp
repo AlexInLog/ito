@@ -57,7 +57,7 @@ TEST_CASE("a timer whose transfer to the ready queue fails to allocate still fir
         ito::loop                      loop{};
         std::optional<ito::task<void>> sleeper{}; // outlives the failed run, so a lost timer would show
         bool                           resumed = false;
-        auto [never_resolved, never]   = ito::async::promise<>::create();
+        auto [never_resolved, never]           = ito::async::promise<>::create();
 
         try
         {
@@ -75,8 +75,7 @@ TEST_CASE("a timer whose transfer to the ready queue fails to allocate still fir
                     while (std::chrono::steady_clock::now() < deadline)
                     {
                     }
-                    for (int i = 0; i < queued; ++i)
-                        loop.call_soon([]() noexcept {});
+                    for (int i = 0; i < queued; ++i) loop.call_soon([]() noexcept { });
                     g_fail_next_allocation = true;
                 });
 
@@ -127,8 +126,7 @@ TEST_CASE("a promise whose resume fails to queue still wakes its awaiter once th
             // lets `awaiter` start and suspend on its future
             co_await ito::async::sleep_for(1ms);
 
-            for (int i = 0; i < queued; ++i)
-                loop.call_soon([]() noexcept {});
+            for (int i = 0; i < queued; ++i) loop.call_soon([]() noexcept { });
 
             // the value is set first, then queuing `awaiter`'s resume is the next allocation
             g_fail_next_allocation = true;

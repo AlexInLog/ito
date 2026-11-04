@@ -116,12 +116,12 @@ TEST_CASE("call_soon only accepts callbacks that can't throw")
 {
     // a callback has nobody awaiting it, so a throwing one is rejected at compile time rather than unwinding
     // whichever run_until_complete() happens to be running
-    STATIC_REQUIRE(call_soon_accepts<decltype([]() noexcept {})>);
-    STATIC_REQUIRE_FALSE(call_soon_accepts<decltype([]() {})>);
+    STATIC_REQUIRE(call_soon_accepts<decltype([]() noexcept { })>);
+    STATIC_REQUIRE_FALSE(call_soon_accepts<decltype([]() { })>);
     STATIC_REQUIRE_FALSE(call_soon_accepts<std::function<void()>>);
 
     // callbacks are stored move-only, so they can own move-only state instead of referencing it
-    STATIC_REQUIRE(call_soon_accepts<decltype([p = std::unique_ptr<int>{}]() noexcept {})>);
+    STATIC_REQUIRE(call_soon_accepts<decltype([p = std::unique_ptr<int>{}]() noexcept { })>);
 
     // a raw coroutine handle is rejected: its frame could be destroyed while the resume is queued, so coroutine
     // resumes are only queued through views that skip a destroyed frame
