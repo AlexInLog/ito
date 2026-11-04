@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ito/coro.hpp>
+#include <ito/details/utils/anchored.hpp>
 #include <ito/details/utils/raii_coroutine_handle.hpp>
-#include <ito/details/utils/trackable.hpp>
 #include <ito/fwd.hpp>
 
 namespace ito
@@ -13,9 +13,9 @@ namespace ito
     class [[nodiscard("ito::task can't be discarded")]] task final
     {
     private:
-        using handle_type = details::utils::trackable<details::utils::raii_coroutine_handle<>>;
-        explicit task(handle_type h)
+        task(details::utils::raii_coroutine_handle<> h, details::utils::anchor anchor) noexcept
             : m_h{std::move(h)}
+            , m_anchor{std::move(anchor)}
         {
         }
 
@@ -33,10 +33,12 @@ namespace ito
         {
             struct awaitable
             {
-                handle_type _h;
+                // the frame and its anchor move together: the task's queued start may still be pending when it's awaited
+                details::utils::raii_coroutine_handle<> _h;
+                details::utils::anchor                  _anchor;
 
             private:
-                typename coro<T>::promise_type& cast() { return _h.get().get<typename coro<T>::promise_type>().promise(); }
+                typename coro<T>::promise_type& cast() { return _h.get<typename coro<T>::promise_type>().promise(); }
 
             public:
                 constexpr bool await_ready() noexcept { return cast().is_ready(); }
@@ -50,13 +52,15 @@ namespace ito
                 T await_resume() { return cast().get_result(); }
             };
 
-            if (m_h.get()) [[likely]]
-                return awaitable{std::move(m_h)};
+            if (m_h) [[likely]]
+                return awaitable{std::move(m_h), std::move(m_anchor)};
 
             details::throw_empty_coro();
         }
 
     private:
-        handle_type m_h;
+        // Owns the frame; m_anchor is what the queued start is anchored to, so destroying the task cancels that start.
+        details::utils::raii_coroutine_handle<> m_h;
+        details::utils::anchor                  m_anchor;
     };
 } // namespace ito

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ito/details/utils/anchored.hpp>
 #include <ito/details/utils/outcome.hpp>
 #include <ito/details/utils/trackable.hpp>
 #include <ito/fwd.hpp>
@@ -26,9 +27,9 @@ namespace ito::async
         struct future_state
         {
             ito::details::utils::outcome<T> value{};
-            // Viewing the awaiting coroutine's handle (owned by the awaitable inside its frame) rather than
-            // holding it raw: once scheduled, the loop skips the resume if that frame was destroyed meanwhile.
-            std::optional<ito::details::utils::trackable<std::coroutine_handle<>>::weak_ref> continuation{};
+            // The awaiting coroutine's resume, anchored to its frame (the anchor lives in the awaitable) rather than a
+            // raw handle: once scheduled, the loop skips the resume if that frame was destroyed meanwhile.
+            std::optional<ito::details::queued_resume> continuation{};
 
             // Queues the awaiting coroutine's resume and clears `continuation` in the same step, so it can never be
             // scheduled twice. call_soon() has no effect if it throws, so on failure `continuation` stays registered
@@ -173,8 +174,9 @@ namespace ito::async
         {
             struct awaitable
             {
-                ito::details::utils::trackable<details::future_state<T>>               obj;
-                std::optional<ito::details::utils::trackable<std::coroutine_handle<>>> handle{};
+                ito::details::utils::trackable<details::future_state<T>> obj;
+                // lives in the awaiting coroutine's frame, so its queued resume dies with that frame
+                std::optional<ito::details::utils::anchor> frame_anchor{};
 
                 explicit awaitable(ito::details::utils::trackable<details::future_state<T>>&& obj)
                     : obj{std::move(obj)}
@@ -193,9 +195,9 @@ namespace ito::async
 
                 auto await_suspend(std::coroutine_handle<> h) noexcept
                 {
-                    auto [handle_obj, view] = ito::details::utils::trackable<std::coroutine_handle<>>::create(h);
-                    handle.emplace(std::move(handle_obj));
-                    obj->continuation.emplace(std::move(view));
+                    auto [resume, anchor] = ito::details::queued_resume::create(h);
+                    frame_anchor.emplace(std::move(anchor));
+                    obj->continuation.emplace(std::move(resume));
                 }
 
                 T await_resume() { return obj->value.get_result(); }
