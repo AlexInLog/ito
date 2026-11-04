@@ -103,13 +103,13 @@ namespace ito::details::utils
         static std::pair<trackable<T>, weak_ref> create(Args&&... args)
         {
             trackable<T> obj{trackable<T>::inplace{}, std::forward<Args>(args)...};
-            weak_ref    v{obj};
+            weak_ref     v{obj};
 
             return {std::move(obj), std::move(v)};
         }
 
     private:
-        T          m_object;
+        T         m_object;
         weak_ref* m_view{};
     };
 } // namespace ito::details::utils

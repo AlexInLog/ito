@@ -56,7 +56,7 @@ namespace ito::details
     {
         struct entry
         {
-            std::chrono::steady_clock::time_point                         deadline;
+            std::chrono::steady_clock::time_point                        deadline;
             details::utils::trackable<std::coroutine_handle<>>::weak_ref view;
         };
 
@@ -87,8 +87,7 @@ namespace ito::details
         // heap are left in place until they surface here.
         void drop_cancelled_earliest()
         {
-            while (!m_entries.empty() && !m_entries.front().view.get())
-                pop_earliest();
+            while (!m_entries.empty() && !m_entries.front().view.get()) pop_earliest();
         }
 
     private:
@@ -237,10 +236,7 @@ namespace ito
             {
                 auto [obj, view] = details::utils::trackable<std::coroutine_handle<>>::create(h);
                 tracked.emplace(std::move(obj));
-                m_queue.emplace_back(
-                    std::in_place_type_t<details::utils::trackable<std::coroutine_handle<>>::weak_ref>{},
-                    std::move(view)
-                );
+                m_queue.emplace_back(std::in_place_type_t<details::utils::trackable<std::coroutine_handle<>>::weak_ref>{}, std::move(view));
             }
             else
                 h.resume();

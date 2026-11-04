@@ -19,7 +19,7 @@ env:
   # OS release can't be reused on another. Images are pinned below rather than *-latest so they only change on purpose.
   HASH_NUMBER : 2
 
-jobs: 
+jobs:
   tests:
     strategy:
       matrix:
@@ -74,7 +74,7 @@ jobs:
 
       - name: get conan
         uses: turtlebrowser/get-conan@main
- 
+
       - name: check conan cache
         uses: actions/cache@v5
         id: check_cache
@@ -85,7 +85,7 @@ jobs:
       - name: conan detect profile
         run: |
           conan profile detect --force
- 
+
       - name: Run CMake
         uses: lukka/run-cmake@v10
         with:
@@ -122,7 +122,7 @@ jobs:
             ${{ env.LOCALAPPDATA }}/ccache
             ${{ env.XDG_CACHE_HOME }}/ccache
           key: ${{ runner.os }}-deps-coverage--${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}-${{ env.HASH_NUMBER}}
-            
+
       - name: Setup Cpp
         uses: aminya/setup-cpp@v1
         with:
@@ -131,7 +131,7 @@ jobs:
           ninja: true
           conan: true
           ccache: true
- 
+
       - name: check conan cache
         uses: actions/cache@v5
         id: check_cache
@@ -142,7 +142,7 @@ jobs:
       - name: conan detect profile
         run: |
           conan profile detect --force
- 
+
       - name: Run CMake
         uses: lukka/run-cmake@v10
         with:
@@ -152,11 +152,11 @@ jobs:
 
       - name: Process coverage info
         run: cmake --build build -t coverage
- 
+
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v7
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          args: > 
+          args: >
             --define sonar.cfamily.compile-commands=build/compile_commands.json
