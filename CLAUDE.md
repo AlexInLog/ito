@@ -35,6 +35,9 @@ Repo: https://github.com/AlexInLog/ito
   - `include/ito/details/` — implementation details not part of the public API (namespace-mirrored, see below).
   - `include/ito/async/` — async primitives: `future.hpp` (`promise<T>`/`future<T>`; `promise.hpp` just includes it)
     and `sleep.hpp`.
+- `examples/` — small programs (`ITO_BUILD_EXAMPLES`, on in the presets that build tests), registered as ctest tests
+  that check their own outcome. `examples/.clang-tidy` allows reference coroutine parameters: the examples pass
+  state owned by the awaiting coroutine.
 - Namespaces:
   - `ito` — public API (`coro<T>`, `loop`, `task<T>`).
   - `ito::async` — async primitives layered on top of `coro<T>`, e.g. `promise<T>`/`future<T>` (settable from outside

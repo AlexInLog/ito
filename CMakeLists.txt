@@ -39,6 +39,7 @@ endif(CCACHE)
 # -- Options ---------------------------------
 option(ITO_BUILD_TESTS "Build tests" OFF)
 option(ITO_BUILD_BENCHMARKS "Build benchmarks" OFF)
+option(ITO_BUILD_EXAMPLES "Build examples" OFF)
 
 option(ITO_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(ITO_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
@@ -220,7 +221,6 @@ if (ITO_BUILD_BENCHMARKS)
 endif()
 
 # ── Examples ───────────────────────────────────────────────────────────────────
-# option(ITO_BUILD_EXAMPLES "Build examples" ON)
-# if(ITO_BUILD_EXAMPLES)
-#     add_subdirectory(examples)
-# endif()
+if(ITO_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
