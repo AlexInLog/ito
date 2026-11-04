@@ -1,10 +1,10 @@
 #pragma once
 
 #include <ito/coro.hpp>
+#include <ito/details/utils/anchored.hpp>
 #include <ito/details/utils/finally.hpp>
 #include <ito/details/utils/move_only_callback.hpp>
 #include <ito/details/utils/raii_coroutine_handle.hpp>
-#include <ito/details/utils/trackable.hpp>
 #include <ito/exceptions.hpp>
 #include <ito/fwd.hpp>
 #include <ito/task.hpp>
@@ -23,12 +23,14 @@
 
 namespace ito::details
 {
-    // Coroutine entries the loop can queue. Always views, never raw handles: the frame they resume may be destroyed
-    // while they're queued, and the view then turns the resume into a no-op. Resuming never throws: a coroutine
-    // body's exceptions are captured by its promise.
+    // A queued coroutine resume. Never a raw handle: the frame it resumes may be destroyed while it's queued, so the
+    // handle is anchored to that frame (an anchor lives in or next to it) and get() returns null once it's gone,
+    // turning the resume into a no-op. Resuming never throws: a coroutine body's exceptions are captured by its promise.
+    using queued_resume = utils::anchored<std::coroutine_handle<>>;
+
+    // Coroutine entries the loop can queue.
     template<typename T>
-    concept loop_handle = std::same_as<T, utils::trackable<utils::raii_coroutine_handle<>>::weak_ref>
-                       || std::same_as<T, utils::trackable<std::coroutine_handle<>>::weak_ref>;
+    concept loop_handle = std::same_as<T, queued_resume>;
 
     // Callbacks must not throw (move_only_callback only accepts nothrow-invocable callables): nobody awaits a
     // callback, so its exception would otherwise unwind whichever run_until_complete() happens to be running,
@@ -38,16 +40,10 @@ namespace ito::details
 
     struct loop_entry_executor
     {
-        void operator()(const details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_ref& handle) const
+        void operator()(queued_resume& resume) const
         {
-            if (const auto* ptr = handle.get())
-                ptr->get().resume();
-        }
-
-        void operator()(const details::utils::trackable<std::coroutine_handle<>>::weak_ref& handle) const
-        {
-            if (const auto* ptr = handle.get())
-                ptr->resume();
+            if (const auto* handle = resume.get())
+                handle->resume();
         }
         void operator()(utils::move_only_callback& callback) const { callback(); }
     };
@@ -56,16 +52,16 @@ namespace ito::details
     {
         struct entry
         {
-            std::chrono::steady_clock::time_point                        deadline;
-            details::utils::trackable<std::coroutine_handle<>>::weak_ref view;
+            std::chrono::steady_clock::time_point deadline;
+            queued_resume                         resume;
         };
 
         static constexpr bool later(const entry& a, const entry& b) { return a.deadline > b.deadline; }
 
     public:
-        void push(std::chrono::steady_clock::time_point deadline, details::utils::trackable<std::coroutine_handle<>>::weak_ref view)
+        void push(std::chrono::steady_clock::time_point deadline, queued_resume resume)
         {
-            m_entries.push_back(entry{.deadline = deadline, .view = {std::move(view)}});
+            m_entries.push_back(entry{.deadline = deadline, .resume = std::move(resume)});
             std::push_heap(m_entries.begin(), m_entries.end(), later);
         }
 
@@ -73,9 +69,9 @@ namespace ito::details
 
         [[nodiscard]] std::chrono::steady_clock::time_point next_deadline() const { return m_entries.front().deadline; }
 
-        // Read separately from pop_earliest() so the view can be moved out first and the entry dropped only once
+        // Read separately from pop_earliest() so the resume can be moved out first and the entry dropped only once
         // that succeeded: if moving it into the ready queue fails to allocate, the timer stays in place.
-        [[nodiscard]] details::utils::trackable<std::coroutine_handle<>>::weak_ref& earliest() { return m_entries.front().view; }
+        [[nodiscard]] queued_resume& earliest() { return m_entries.front().resume; }
 
         void pop_earliest()
         {
@@ -87,7 +83,7 @@ namespace ito::details
         // heap are left in place until they surface here.
         void drop_cancelled_earliest()
         {
-            while (!m_entries.empty() && !m_entries.front().view.get()) pop_earliest();
+            while (!m_entries.empty() && !m_entries.front().resume.get()) pop_earliest();
         }
 
     private:
@@ -143,15 +139,16 @@ namespace ito
 
                     void await_suspend(std::coroutine_handle<> h)
                     {
-                        auto [obj, view] = details::utils::trackable<std::coroutine_handle<>>::create(h);
-                        handle.emplace(std::move(obj));
-                        loop::current().m_timers.push(deadline, std::move(view));
+                        auto [resume, anchor] = details::queued_resume::create(h);
+                        frame_anchor.emplace(std::move(anchor));
+                        loop::current().m_timers.push(deadline, std::move(resume));
                     }
 
                     static constexpr void await_resume() noexcept { }
 
-                    std::chrono::steady_clock::time_point                             deadline;
-                    std::optional<details::utils::trackable<std::coroutine_handle<>>> handle{};
+                    std::chrono::steady_clock::time_point deadline;
+                    // lives in the sleeping coroutine's frame, so its queued resume dies with that frame
+                    std::optional<details::utils::anchor> frame_anchor{};
                 };
 
                 return awaitable{.deadline = m_deadline};
@@ -164,10 +161,7 @@ namespace ito
     public:
         loop() = default;
 
-        using loop_entry_t = std::variant<
-            details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_ref,
-            details::utils::trackable<std::coroutine_handle<>>::weak_ref,
-            details::utils::move_only_callback>;
+        using loop_entry_t = std::variant<details::queued_resume, details::utils::move_only_callback>;
 
         template<typename T>
         T run_until_complete(ito::coro<T>&& coro)
@@ -184,15 +178,13 @@ namespace ito
         template<typename T>
         ito::task<T> create_task(ito::coro<T>&& coro)
         {
-            auto h           = static_cast<details::utils::raii_coroutine_handle<>>(std::move(coro).detach());
-            auto [obj, view] = details::utils::trackable<details::utils::raii_coroutine_handle<>>::create(std::move(h));
+            auto h               = static_cast<details::utils::raii_coroutine_handle<>>(std::move(coro).detach());
+            auto [start, anchor] = details::queued_resume::create(h.get());
 
-            m_queue.emplace_back(
-                std::in_place_type_t<details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_ref>{},
-                std::move(view)
-            );
+            m_queue.emplace_back(std::in_place_type_t<details::queued_resume>{}, std::move(start));
 
-            return ito::task<T>{std::move(obj)};
+            // the task owns the frame and its anchor together, so the queued start dies with the frame
+            return ito::task<T>{std::move(h), std::move(anchor)};
         }
 
         // A callback may run after the coroutine that queued it has finished (later in this run, or in a later
@@ -228,15 +220,15 @@ namespace ito
     private:
         void run_until_complete_impl(std::coroutine_handle<> h)
         {
-            // Queued as a view rather than a raw handle: if the loop throws before reaching it (queued entries can't
+            // Queued anchored rather than as a raw handle: if the loop throws before reaching it (queued entries can't
             // throw, so this means an allocation failure in the loop itself), the exception destroys `h`'s frame along
-            // with `tracked`, and a later run of this loop skips the stale entry instead of resuming it.
-            std::optional<details::utils::trackable<std::coroutine_handle<>>> tracked{};
+            // with `frame_anchor`, and a later run of this loop skips the stale entry instead of resuming it.
+            std::optional<details::utils::anchor> frame_anchor{};
             if (!m_queue.empty())
             {
-                auto [obj, view] = details::utils::trackable<std::coroutine_handle<>>::create(h);
-                tracked.emplace(std::move(obj));
-                m_queue.emplace_back(std::in_place_type_t<details::utils::trackable<std::coroutine_handle<>>::weak_ref>{}, std::move(view));
+                auto [resume, anchor] = details::queued_resume::create(h);
+                frame_anchor.emplace(std::move(anchor));
+                m_queue.emplace_back(std::in_place_type_t<details::queued_resume>{}, std::move(resume));
             }
             else
                 h.resume();
@@ -248,11 +240,8 @@ namespace ito
                     const auto now = std::chrono::steady_clock::now();
                     while (!m_timers.empty() && m_timers.next_deadline() <= now)
                     {
-                        // emplace_back has no effect if it throws, so the view only leaves the heap once it's queued
-                        m_queue.emplace_back(
-                            std::in_place_type_t<details::utils::trackable<std::coroutine_handle<>>::weak_ref>{},
-                            std::move(m_timers.earliest())
-                        );
+                        // emplace_back has no effect if it throws, so the resume only leaves the heap once it's queued
+                        m_queue.emplace_back(std::in_place_type_t<details::queued_resume>{}, std::move(m_timers.earliest()));
                         m_timers.pop_earliest();
                     }
 
