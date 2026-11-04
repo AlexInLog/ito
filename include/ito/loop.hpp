@@ -27,8 +27,8 @@ namespace ito::details
     // while they're queued, and the view then turns the resume into a no-op. Resuming never throws: a coroutine
     // body's exceptions are captured by its promise.
     template<typename T>
-    concept loop_handle = std::same_as<T, utils::trackable<utils::raii_coroutine_handle<>>::weak_view>
-                       || std::same_as<T, utils::trackable<std::coroutine_handle<>>::weak_view>;
+    concept loop_handle = std::same_as<T, utils::trackable<utils::raii_coroutine_handle<>>::weak_ref>
+                       || std::same_as<T, utils::trackable<std::coroutine_handle<>>::weak_ref>;
 
     // Callbacks must not throw (move_only_callback only accepts nothrow-invocable callables): nobody awaits a
     // callback, so its exception would otherwise unwind whichever run_until_complete() happens to be running,
@@ -38,13 +38,13 @@ namespace ito::details
 
     struct loop_entry_executor
     {
-        void operator()(const details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view& handle) const
+        void operator()(const details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_ref& handle) const
         {
             if (const auto* ptr = handle.get())
                 ptr->get().resume();
         }
 
-        void operator()(const details::utils::trackable<std::coroutine_handle<>>::weak_view& handle) const
+        void operator()(const details::utils::trackable<std::coroutine_handle<>>::weak_ref& handle) const
         {
             if (const auto* ptr = handle.get())
                 ptr->resume();
@@ -57,13 +57,13 @@ namespace ito::details
         struct entry
         {
             std::chrono::steady_clock::time_point                         deadline;
-            details::utils::trackable<std::coroutine_handle<>>::weak_view view;
+            details::utils::trackable<std::coroutine_handle<>>::weak_ref view;
         };
 
         static constexpr bool later(const entry& a, const entry& b) { return a.deadline > b.deadline; }
 
     public:
-        void push(std::chrono::steady_clock::time_point deadline, details::utils::trackable<std::coroutine_handle<>>::weak_view view)
+        void push(std::chrono::steady_clock::time_point deadline, details::utils::trackable<std::coroutine_handle<>>::weak_ref view)
         {
             m_entries.push_back(entry{.deadline = deadline, .view = {std::move(view)}});
             std::push_heap(m_entries.begin(), m_entries.end(), later);
@@ -75,7 +75,7 @@ namespace ito::details
 
         // Read separately from pop_earliest() so the view can be moved out first and the entry dropped only once
         // that succeeded: if moving it into the ready queue fails to allocate, the timer stays in place.
-        [[nodiscard]] details::utils::trackable<std::coroutine_handle<>>::weak_view& earliest() { return m_entries.front().view; }
+        [[nodiscard]] details::utils::trackable<std::coroutine_handle<>>::weak_ref& earliest() { return m_entries.front().view; }
 
         void pop_earliest()
         {
@@ -166,8 +166,8 @@ namespace ito
         loop() = default;
 
         using loop_entry_t = std::variant<
-            details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view,
-            details::utils::trackable<std::coroutine_handle<>>::weak_view,
+            details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_ref,
+            details::utils::trackable<std::coroutine_handle<>>::weak_ref,
             details::utils::move_only_callback>;
 
         template<typename T>
@@ -189,7 +189,7 @@ namespace ito
             auto [obj, view] = details::utils::trackable<details::utils::raii_coroutine_handle<>>::create(std::move(h));
 
             m_queue.emplace_back(
-                std::in_place_type_t<details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_view>{},
+                std::in_place_type_t<details::utils::trackable<details::utils::raii_coroutine_handle<>>::weak_ref>{},
                 std::move(view)
             );
 
@@ -238,7 +238,7 @@ namespace ito
                 auto [obj, view] = details::utils::trackable<std::coroutine_handle<>>::create(h);
                 tracked.emplace(std::move(obj));
                 m_queue.emplace_back(
-                    std::in_place_type_t<details::utils::trackable<std::coroutine_handle<>>::weak_view>{},
+                    std::in_place_type_t<details::utils::trackable<std::coroutine_handle<>>::weak_ref>{},
                     std::move(view)
                 );
             }
@@ -254,7 +254,7 @@ namespace ito
                     {
                         // emplace_back has no effect if it throws, so the view only leaves the heap once it's queued
                         m_queue.emplace_back(
-                            std::in_place_type_t<details::utils::trackable<std::coroutine_handle<>>::weak_view>{},
+                            std::in_place_type_t<details::utils::trackable<std::coroutine_handle<>>::weak_ref>{},
                             std::move(m_timers.earliest())
                         );
                         m_timers.pop_earliest();

@@ -28,7 +28,7 @@ namespace ito::async
             ito::details::utils::outcome<T> value{};
             // Viewing the awaiting coroutine's handle (owned by the awaitable inside its frame) rather than
             // holding it raw: once scheduled, the loop skips the resume if that frame was destroyed meanwhile.
-            std::optional<ito::details::utils::trackable<std::coroutine_handle<>>::weak_view> continuation{};
+            std::optional<ito::details::utils::trackable<std::coroutine_handle<>>::weak_ref> continuation{};
 
             // Queues the awaiting coroutine's resume and clears `continuation` in the same step, so it can never be
             // scheduled twice. call_soon() has no effect if it throws, so on failure `continuation` stays registered
@@ -65,7 +65,7 @@ namespace ito::async
 
             // The move constructor is intentionally left defaulted: all state that the destructor
             // above cares about (`m_value->continuation`) lives inside the `trackable` member, whose
-            // own move constructor already re-points the associated `weak_view`/clears the source
+            // own move constructor already re-points the associated `weak_ref`/clears the source
             // correctly. There is nothing left for this class to additionally manage on move.
             promise_base(const promise_base&)            = delete;
             promise_base(promise_base&&) noexcept        = default;
@@ -102,7 +102,7 @@ namespace ito::async
             }
 
         protected:
-            explicit promise_base(ito::details::utils::trackable<details::future_state<T>>::weak_view&& value)
+            explicit promise_base(ito::details::utils::trackable<details::future_state<T>>::weak_ref&& value)
                 : m_value{std::move(value)}
             {
             }
@@ -159,7 +159,7 @@ namespace ito::async
             }
 
         private:
-            ito::details::utils::trackable<details::future_state<T>>::weak_view m_value{};
+            ito::details::utils::trackable<details::future_state<T>>::weak_ref m_value{};
         };
     } // namespace details
 
@@ -229,7 +229,7 @@ namespace ito::async
         using details::promise_base<T>::is_settled;
 
     private:
-        explicit promise(ito::details::utils::trackable<details::future_state<T>>::weak_view&& value)
+        explicit promise(ito::details::utils::trackable<details::future_state<T>>::weak_ref&& value)
             : details::promise_base<T>{std::move(value)}
         {
         }
@@ -251,7 +251,7 @@ namespace ito::async
         using details::promise_base<void>::is_settled;
 
     private:
-        explicit promise(ito::details::utils::trackable<details::future_state<void>>::weak_view&& value)
+        explicit promise(ito::details::utils::trackable<details::future_state<void>>::weak_ref&& value)
             : details::promise_base<void>{std::move(value)}
         {
         }

@@ -54,9 +54,9 @@ namespace ito::details::utils
         [[nodiscard]] T*       operator->() { return &m_object; }
         [[nodiscard]] const T* operator->() const { return &m_object; }
 
-        class weak_view
+        class weak_ref
         {
-            explicit weak_view(trackable<T>& object)
+            explicit weak_ref(trackable<T>& object)
                 : m_object{&object}
             {
                 m_object->m_view = this;
@@ -65,22 +65,22 @@ namespace ito::details::utils
         public:
             friend class trackable<T>;
 
-            ~weak_view() noexcept
+            ~weak_ref() noexcept
             {
                 if (m_object)
                     m_object->m_view = nullptr;
             }
 
-            weak_view(weak_view&& o) noexcept
+            weak_ref(weak_ref&& o) noexcept
                 : m_object(std::exchange(o.m_object, nullptr))
             {
                 if (m_object)
                     m_object->m_view = this;
             }
 
-            weak_view(const weak_view&)            = delete;
-            weak_view& operator=(const weak_view&) = delete;
-            weak_view& operator=(weak_view&& o) noexcept
+            weak_ref(const weak_ref&)            = delete;
+            weak_ref& operator=(const weak_ref&) = delete;
+            weak_ref& operator=(weak_ref&& o) noexcept
             {
                 if (m_object)
                     m_object->m_view = nullptr;
@@ -100,16 +100,16 @@ namespace ito::details::utils
 
         template<typename... Args>
             requires std::constructible_from<T, Args&&...>
-        static std::pair<trackable<T>, weak_view> create(Args&&... args)
+        static std::pair<trackable<T>, weak_ref> create(Args&&... args)
         {
             trackable<T> obj{trackable<T>::inplace{}, std::forward<Args>(args)...};
-            weak_view    v{obj};
+            weak_ref    v{obj};
 
             return {std::move(obj), std::move(v)};
         }
 
     private:
         T          m_object;
-        weak_view* m_view{};
+        weak_ref* m_view{};
     };
 } // namespace ito::details::utils

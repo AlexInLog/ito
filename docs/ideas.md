@@ -10,7 +10,7 @@ is the short public checklist; this file keeps the reasoning behind it. Planned 
   it sleeps, so it never waits on a dead deadline. Entries further down keep their memory until they surface.
   Removing them on cancel needs each sleep to know its heap position, which an intrusive timer node would give
   (see below).
-- **Timer heap entries are `weak_view`s:** every sift during `push_heap`/`pop_heap` moves a `weak_view`, and each
+- **Timer heap entries are `weak_ref`s:** every sift during `push_heap`/`pop_heap` moves a `weak_ref`, and each
   move writes a back-pointer into another coroutine's frame. Fine at today's scale, but it's a cache miss per
   swap.
 - **No benchmark with active timers:** the loop calls `steady_clock::now()` once per tick only when timers exist,

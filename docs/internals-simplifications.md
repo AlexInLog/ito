@@ -8,7 +8,7 @@ verified by the existing tests plus benchmarks before and after. Related open is
 
 ### Problem
 
-`trackable<T>` pairs an owner holding a `T` with a `weak_view` that borrows it. That fits `future_state<T>`: the
+`trackable<T>` pairs an owner holding a `T` with a `weak_ref` that borrows it. That fits `future_state<T>`: the
 promise reads and writes the shared state through the view.
 
 The other users only want to resume a coroutine if its frame is still alive:
@@ -30,7 +30,7 @@ Keep the link and back-pointer patching, but put the payload on the queued side:
 
 | | holds `T` | other side |
 |---|---|---|
-| `trackable<T>` (kept for `future_state`) | owner | `trackable<T>::weak_view` |
+| `trackable<T>` (kept for `future_state`) | owner | `trackable<T>::weak_ref` |
 | `guarded<T>` (queued resumes) | `guarded<T>`, the queued ref | `guard`, an alive marker |
 
 ```cpp
