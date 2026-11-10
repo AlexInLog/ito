@@ -14,6 +14,7 @@
 #include <concepts>
 #include <coroutine>
 #include <deque>
+#include <iostream>
 #include <optional>
 #include <thread>
 #include <type_traits>
@@ -170,7 +171,7 @@ namespace ito
 
             details::utils::raii_coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
 
-            run_until_complete_impl(h.template get<void>());
+            run_until_complete_impl(h.promise());
 
             return h->get_result();
         }
@@ -178,25 +179,21 @@ namespace ito
         template<typename T>
         ito::task<T> create_task(ito::coro<T>&& coro)
         {
-            auto h               = static_cast<details::utils::raii_coroutine_handle<>>(std::move(coro).detach());
-            auto [start, anchor] = details::queued_resume::create(h.get());
-
-            m_queue.emplace_back(std::in_place_type_t<details::queued_resume>{}, std::move(start));
-
-            // the task owns the frame and its anchor together, so the queued start dies with the frame
-            return ito::task<T>{std::move(h), std::move(anchor)};
+            details::utils::raii_coroutine_handle<typename ito::coro<T>::promise_type> h = std::move(coro).detach();
+            push_back_queue(h.promise());
+            return ito::task<T>{static_cast<details::utils::raii_coroutine_handle<>>(std::move(h))};
         }
 
         // A callback may run after the coroutine that queued it has finished (later in this run, or in a later
         // run): own what it touches, e.g. capture a promise by move, rather than referencing a coroutine's locals.
         template<typename Fn>
             requires details::loop_handle<std::remove_cvref_t<Fn>> || details::loop_callback<Fn>
-        void call_soon(Fn&& callback)
+        static void call_soon([[maybe_unused]] Fn&& callback)
         {
-            if constexpr (details::loop_handle<std::remove_cvref_t<Fn>>)
-                m_queue.emplace_back(std::forward<Fn>(callback));
-            else
-                m_queue.emplace_back(std::in_place_type_t<details::utils::move_only_callback>{}, std::forward<Fn>(callback));
+            // if constexpr (details::loop_handle<std::remove_cvref_t<Fn>>)
+            //     m_queue.emplace_back(std::forward<Fn>(callback));
+            // else
+            //     m_queue.emplace_back(std::in_place_type_t<details::utils::move_only_callback>{}, std::forward<Fn>(callback));
         }
 
         [[nodiscard]] static auto sleep_until(std::chrono::steady_clock::time_point deadline) { return sleep_awaitable{deadline}; }
@@ -218,54 +215,91 @@ namespace ito
         static loop* try_current() noexcept { return current_impl(); }
 
     private:
-        void run_until_complete_impl(std::coroutine_handle<> h)
+        void run_until_complete_impl(details::base_promise_type* promise)
         {
             // Queued anchored rather than as a raw handle: if the loop throws before reaching it (queued entries can't
             // throw, so this means an allocation failure in the loop itself), the exception destroys `h`'s frame along
             // with `frame_anchor`, and a later run of this loop skips the stale entry instead of resuming it.
-            std::optional<details::utils::anchor> frame_anchor{};
-            if (!m_queue.empty())
+            push_back_queue(promise);
+            auto h = promise->get_this_handle();
+            while (!h.done() && (m_head.next || !m_timers.empty()))
             {
-                auto [resume, anchor] = details::queued_resume::create(h);
-                frame_anchor.emplace(std::move(anchor));
-                m_queue.emplace_back(std::in_place_type_t<details::queued_resume>{}, std::move(resume));
-            }
-            else
-                h.resume();
-
-            while (!h.done() && (!m_queue.empty() || !m_timers.empty()))
-            {
-                if (!m_timers.empty())
-                {
-                    const auto now = std::chrono::steady_clock::now();
-                    while (!m_timers.empty() && m_timers.next_deadline() <= now)
-                    {
-                        // emplace_back has no effect if it throws, so the resume only leaves the heap once it's queued
-                        m_queue.emplace_back(std::in_place_type_t<details::queued_resume>{}, std::move(m_timers.earliest()));
-                        m_timers.pop_earliest();
-                    }
-
-                    if (m_queue.empty())
-                    {
-                        m_timers.drop_cancelled_earliest();
-                        if (!m_timers.empty())
-                            std::this_thread::sleep_until(m_timers.next_deadline());
-                        continue;
-                    }
-                }
+                // if (!m_timers.empty())
+                // {
+                //     const auto now = std::chrono::steady_clock::now();
+                //     while (!m_timers.empty() && m_timers.next_deadline() <= now)
+                //     {
+                //         // emplace_back has no effect if it throws, so the resume only leaves the heap once it's queued
+                //         m_queue.emplace_back(std::in_place_type_t<details::queued_resume>{}, std::move(m_timers.earliest()));
+                //         m_timers.pop_earliest();
+                //     }
+                //
+                //     if (m_queue.empty())
+                //     {
+                //         m_timers.drop_cancelled_earliest();
+                //         if (!m_timers.empty())
+                //             std::this_thread::sleep_until(m_timers.next_deadline());
+                //         continue;
+                //     }
+                // }
 
                 // Runs only the entries ready when this tick started (including the timers just moved in);
                 // anything they schedule waits for the next tick, so timers are checked once per tick.
-                for (auto n = m_queue.size(); n > 0 && !h.done(); --n)
+                if (auto ptr = m_head.next)
                 {
-                    const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
-                    std::visit(details::loop_entry_executor{}, m_queue.front());
+                    // if (m_first == m_last || !m_last)
+                    // {
+                    //     m_first = {};
+                    //     m_last  = {};
+                    // }
+                    // else
+                    m_head.next = ptr->next;
+
+                    if (auto n = ptr->next)
+                        n->prev = ptr->prev;
+                    if (auto p = ptr->prev)
+                        p->next = ptr->next;
+                    ptr->next = {};
+                    ptr->prev = {};
+                    ptr->get_this_handle().resume();
                 }
+                // for (auto n = m_queue.size(); n > 0 && !h.done(); --n)
+                // {
+                //     const auto _ = details::utils::finally{[this]() noexcept { m_queue.pop_front(); }};
+                //     std::visit(details::loop_entry_executor{}, m_queue.front());
+                // }
             }
         }
 
+
+        void push_back_queue(details::base_promise_type* newItem)
+        {
+            // if (!m_last)
+            //     m_last = m_first;
+
+            details::base_promise_type* last = &m_head;
+            while (auto next = last->next)
+            {
+                last = next;
+            }
+
+
+            last->next    = newItem;
+            newItem->prev = last;
+        }
+
     private:
-        std::deque<loop_entry_t> m_queue{};
-        details::timer_queue     m_timers{};
+        static constexpr bool g_M_USE_INTRUSIVE{};
+
+        details::timer_queue m_timers{};
+
+        class head : public details::base_promise_type
+        {
+
+            [[nodiscard]] std::coroutine_handle<> get_this_handle() override { return {}; }
+        };
+
+        head m_head{};
+        // details::base_promise_type* m_last{};
     };
 } // namespace ito

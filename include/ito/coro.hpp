@@ -7,6 +7,7 @@
 
 #include <coroutine>
 #include <exception>
+#include <iostream>
 #include <utility>
 
 namespace ito
@@ -20,6 +21,24 @@ namespace ito
 
         struct base_promise_type
         {
+            base_promise_type()                                    = default;
+            base_promise_type(const base_promise_type&)            = delete;
+            base_promise_type(base_promise_type&&)                 = delete;
+            base_promise_type& operator=(const base_promise_type&) = delete;
+            base_promise_type& operator=(base_promise_type&&)      = delete;
+            virtual ~base_promise_type() noexcept
+            {
+                if (next)
+                {
+                    next->prev = prev;
+                }
+
+                if (prev)
+                {
+                    prev->next = next;
+                }
+            }
+
             std::coroutine_handle<> continuation = std::noop_coroutine();
 
             static constexpr std::suspend_always initial_suspend() noexcept { return {}; }
@@ -36,6 +55,10 @@ namespace ito
                 };
                 return awaitable{continuation};
             }
+
+            [[nodiscard]] virtual std::coroutine_handle<> get_this_handle() = 0;
+            base_promise_type*                            next{};
+            base_promise_type*                            prev{};
         };
 
         template<typename T>
@@ -72,6 +95,11 @@ namespace ito
         struct promise_type final : public details::promise_type<T>
         {
             coro get_return_object() { return coro{std::coroutine_handle<promise_type>::from_promise(*this)}; }
+
+            [[nodiscard]] std::coroutine_handle<> get_this_handle() override
+            {
+                return std::coroutine_handle<promise_type>::from_promise(*this);
+            }
         };
 
         auto operator co_await() &&

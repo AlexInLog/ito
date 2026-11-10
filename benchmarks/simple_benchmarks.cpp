@@ -29,29 +29,29 @@ namespace
         std::optional<ito::async::promise<int>> wake{};
     };
 
-    void wake(mailbox& box, int value)
-    {
-        if (box.wake)
-        {
-            auto promise = std::move(*box.wake);
-            box.wake.reset();
-            promise.set_result(value);
-        }
-    }
+    // void wake(mailbox& box, int value)
+    // {
+    //     if (box.wake)
+    //     {
+    //         auto promise = std::move(*box.wake);
+    //         box.wake.reset();
+    //         promise.set_result(value);
+    //     }
+    // }
 
     // Each hop wakes the other side and suspends until it's woken back: one queued resume per hop, no callbacks.
-    ito::coro<> ping_pong_side(mailbox& mine, mailbox& other, std::int64_t hops)
-    {
-        for (std::int64_t i = 0; i < hops; ++i)
-        {
-            auto [promise, future] = ito::async::promise<int>::create();
-            mine.wake.emplace(std::move(promise));
-            wake(other, 0);
-            co_await std::move(future);
-        }
-        // the other side is still waiting for this side's last hop
-        wake(other, 0);
-    }
+    // ito::coro<> ping_pong_side(mailbox& mine, mailbox& other, std::int64_t hops)
+    // {
+    //     for (std::int64_t i = 0; i < hops; ++i)
+    //     {
+    //         auto [promise, future] = ito::async::promise<int>::create();
+    //         mine.wake.emplace(std::move(promise));
+    //         wake(other, 0);
+    //         co_await std::move(future);
+    //     }
+    //     // the other side is still waiting for this side's last hop
+    //     wake(other, 0);
+    // }
 } // namespace
 
 static void bm_creation_of_coro(benchmark::State& state)
@@ -139,19 +139,19 @@ static void bm_resolve_future_before_await(benchmark::State& state)
 }
 BENCHMARK(bm_resolve_future_before_await);
 
-static void bm_resolve_future_inside_signal(benchmark::State& state)
-{
-    ito::loop loop{};
-    for (auto _ : state)
-    {
-        benchmark::DoNotOptimize(loop.run_until_complete([&loop]() -> ito::coro<int> {
-            auto [promise, f] = ito::async::promise<int>::create();
-            loop.call_soon([&]() noexcept { promise.set_result(10); });
-            co_return co_await std::move(f);
-        }()));
-    }
-}
-BENCHMARK(bm_resolve_future_inside_signal);
+// static void bm_resolve_future_inside_signal(benchmark::State& state)
+// {
+//     ito::loop loop{};
+//     for (auto _ : state)
+//     {
+//         benchmark::DoNotOptimize(loop.run_until_complete([&loop]() -> ito::coro<int> {
+//             auto [promise, f] = ito::async::promise<int>::create();
+//             loop.call_soon([&]() noexcept { promise.set_result(10); });
+//             co_return co_await std::move(f);
+//         }()));
+//     }
+// }
+// BENCHMARK(bm_resolve_future_inside_signal);
 
 static void bm_start_task_inside_coro_and_await(benchmark::State& state)
 {
@@ -208,23 +208,23 @@ static void bm_fan_out_tasks(benchmark::State& state)
 BENCHMARK(bm_fan_out_tasks)->Arg(16)->Arg(1024);
 
 // Two tasks handing control back and forth through futures, inside one run: the cost of one reschedule.
-static void bm_ping_pong_tasks(benchmark::State& state)
-{
-    ito::loop loop{};
-    for (auto _ : state)
-    {
-        loop.run_until_complete([](ito::loop& loop, std::int64_t hops) -> ito::coro<> {
-            mailbox ping{};
-            mailbox pong{};
-            auto    first  = loop.create_task(ping_pong_side(ping, pong, hops));
-            auto    second = loop.create_task(ping_pong_side(pong, ping, hops));
-            co_await std::move(first);
-            co_await std::move(second);
-        }(loop, state.range(0)));
-    }
-    state.SetItemsProcessed(state.iterations() * state.range(0) * 2);
-}
-BENCHMARK(bm_ping_pong_tasks)->Arg(16)->Arg(1024);
+// static void bm_ping_pong_tasks(benchmark::State& state)
+// {
+//     ito::loop loop{};
+//     for (auto _ : state)
+//     {
+//         loop.run_until_complete([](ito::loop& loop, std::int64_t hops) -> ito::coro<> {
+//             mailbox ping{};
+//             mailbox pong{};
+//             auto    first  = loop.create_task(ping_pong_side(ping, pong, hops));
+//             auto    second = loop.create_task(ping_pong_side(pong, ping, hops));
+//             co_await std::move(first);
+//             co_await std::move(second);
+//         }(loop, state.range(0)));
+//     }
+//     state.SetItemsProcessed(state.iterations() * state.range(0) * 2);
+// }
+// BENCHMARK(bm_ping_pong_tasks)->Arg(16)->Arg(1024);
 
 // Tasks destroyed before they start: their queued starts are dead entries the loop still has to get past to reach
 // the task queued after them.
