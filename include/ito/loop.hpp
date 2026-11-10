@@ -160,7 +160,11 @@ namespace ito
         };
 
     public:
-        loop() = default;
+        loop()
+        {
+            m_head.next = &m_tail;
+            m_tail.prev = &m_head;
+        }
 
         using loop_entry_t = std::variant<details::queued_resume, details::utils::move_only_callback>;
 
@@ -222,7 +226,7 @@ namespace ito
             // with `frame_anchor`, and a later run of this loop skips the stale entry instead of resuming it.
             push_back_queue(promise);
             auto h = promise->get_this_handle();
-            while (!h.done() && (m_head.next || !m_timers.empty()))
+            while (!h.done() && ((m_head.next && m_head.next != &m_tail) || !m_timers.empty()))
             {
                 // if (!m_timers.empty())
                 // {
@@ -245,14 +249,15 @@ namespace ito
 
                 // Runs only the entries ready when this tick started (including the timers just moved in);
                 // anything they schedule waits for the next tick, so timers are checked once per tick.
-                if (auto ptr = m_head.next)
+                while (auto ptr = m_head.next)
                 {
-                    // if (m_first == m_last || !m_last)
-                    // {
-                    //     m_first = {};
-                    //     m_last  = {};
-                    // }
-                    // else
+                    if (ptr == &m_tail)
+                        break;
+
+                    auto h = ptr->get_this_handle();
+                    if (h.done())
+                        break;
+
                     m_head.next = ptr->next;
 
                     if (auto n = ptr->next)
@@ -261,7 +266,7 @@ namespace ito
                         p->next = ptr->next;
                     ptr->next = {};
                     ptr->prev = {};
-                    ptr->get_this_handle().resume();
+                    h.resume();
                 }
                 // for (auto n = m_queue.size(); n > 0 && !h.done(); --n)
                 // {
@@ -274,18 +279,10 @@ namespace ito
 
         void push_back_queue(details::base_promise_type* newItem)
         {
-            // if (!m_last)
-            //     m_last = m_first;
-
-            details::base_promise_type* last = &m_head;
-            while (auto next = last->next)
-            {
-                last = next;
-            }
-
-
-            last->next    = newItem;
-            newItem->prev = last;
+            m_tail.prev->next = newItem;
+            newItem->prev     = m_tail.prev;
+            newItem->next     = &m_tail;
+            m_tail.prev       = newItem;
         }
 
     private:
@@ -295,11 +292,10 @@ namespace ito
 
         class head : public details::base_promise_type
         {
-
             [[nodiscard]] std::coroutine_handle<> get_this_handle() override { return {}; }
         };
 
         head m_head{};
-        // details::base_promise_type* m_last{};
+        head m_tail{};
     };
 } // namespace ito
