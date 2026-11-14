@@ -3,7 +3,6 @@
 #include <ito/assert.hpp>
 
 #include <concepts>
-#include <cstddef>
 #include <utility>
 
 namespace ito::details::utils
@@ -36,6 +35,8 @@ namespace ito::details::utils
         {
             if (auto p = m_prev)
                 p->link_next(m_next);
+            else if (auto n = m_next)
+                n->m_prev = nullptr;
 
             m_next = m_prev = {};
         }
@@ -63,12 +64,30 @@ namespace ito::details::utils
     class intrusive_queue_base
     {
     public:
-        intrusive_queue_base() { m_head.link_next(&m_tail); }
+        intrusive_queue_base(const intrusive_queue_base&) = delete;
+        intrusive_queue_base(intrusive_queue_base&& o) noexcept
+            : m_head(std::move(o.m_head))
+            , m_tail(std::move(o.m_tail))
+        {
+            o.m_head.link_next(&o.m_tail);
+        }
+        intrusive_queue_base& operator=(const intrusive_queue_base&) = delete;
+        intrusive_queue_base& operator=(intrusive_queue_base&&)      = delete;
+
+        intrusive_queue_base() noexcept { m_head.link_next(&m_tail); }
+        ~intrusive_queue_base() noexcept
+        {
+            while (!empty()) pop_front_impl();
+        }
 
         [[nodiscard]] bool empty() const noexcept { return m_head.m_next == &m_tail; }
 
     protected:
-        void push_back_impl(intrusive_queue_node& node) noexcept { node.insert_before(m_tail); }
+        void push_back_impl(intrusive_queue_node& node) noexcept
+        {
+            node.unlink();
+            node.insert_before(m_tail);
+        }
 
         intrusive_queue_node& pop_front_impl() noexcept
         {
@@ -80,12 +99,12 @@ namespace ito::details::utils
         }
 
     private:
-        struct bound final : public intrusive_queue_node
+        struct sentinel final : public intrusive_queue_node
         {
         };
 
-        bound m_head{};
-        bound m_tail{};
+        sentinel m_head{};
+        sentinel m_tail{};
     };
 
     template<std::derived_from<intrusive_queue_node> T>

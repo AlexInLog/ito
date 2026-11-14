@@ -64,3 +64,18 @@ TEST_CASE("intrusive_queue base checks")
         }
     }
 }
+
+TEST_CASE("intrusive queue can be moved")
+{
+    ito::details::utils::intrusive_queue<node> q{};
+    node                                       v1{1};
+    node                                       v2{2};
+    q.push_back(v1);
+    q.push_back(v2);
+
+    auto new_q = std::move(q);
+    REQUIRE(q.empty()); // NOLINT(bugprone-use-after-move)
+    REQUIRE(!new_q.empty());
+    REQUIRE(&new_q.pop_front() == &v1);
+    REQUIRE(&new_q.pop_front() == &v2);
+}
