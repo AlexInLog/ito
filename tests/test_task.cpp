@@ -129,7 +129,7 @@ TEST_CASE("base task logic")
             // hop through the loop once so `task` actually starts and suspends on `co_await f`,
             // rather than being cancelled before it ever ran
             auto [tick_promise, tick] = ito::async::promise<>::create();
-            l.call_soon([&]() noexcept { tick_promise.set_result(); });
+            const auto resolve_tick   = l.call_soon([&]() noexcept { tick_promise.set_result(); });
             {
                 REQUIRE_CALL(mock, call(-1));
                 co_await std::move(tick);
@@ -163,7 +163,7 @@ TEST_CASE("base task logic")
             task.emplace(l.create_task(inner()));
 
             auto [tick_promise, tick] = ito::async::promise<>::create();
-            l.call_soon([&]() noexcept { tick_promise.set_result(); });
+            const auto resolve_tick   = l.call_soon([&]() noexcept { tick_promise.set_result(); });
             {
                 REQUIRE_CALL(mock, call(-1));
                 co_await std::move(tick);
@@ -175,7 +175,7 @@ TEST_CASE("base task logic")
             task.reset();
 
             auto [drain_promise, drain] = ito::async::promise<>::create();
-            l.call_soon([&]() noexcept { drain_promise.set_result(); });
+            const auto resolve_drain    = l.call_soon([&]() noexcept { drain_promise.set_result(); });
             co_await std::move(drain);
             co_return;
         }());
@@ -194,7 +194,7 @@ TEST_CASE("base task logic")
 
                 // hop through the loop once so `failing` actually runs and fails, then drop it unawaited
                 auto [tick_promise, tick] = ito::async::promise<>::create();
-                l.call_soon([&]() noexcept { tick_promise.set_result(); });
+                const auto resolve_tick   = l.call_soon([&]() noexcept { tick_promise.set_result(); });
                 REQUIRE_CALL(mock, call(-1));
                 co_await std::move(tick);
             }

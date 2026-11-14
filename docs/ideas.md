@@ -60,7 +60,8 @@ cancellation comes next because its answer shapes most of the others.
    lifetime), the `deque`, and the per-entry allocation. Callbacks need a heap node holding their
    `move_only_callback`. Timers want the same treatment (an intrusive heap or a timer wheel), which also fixes the
    cancelled-timers-deeper-in-the-heap issue. Open design points: who owns callback nodes, keeping the per-tick
-   batching, and how it carries over to multi-threading.
+   batching, and how it carries over to multi-threading. In progress; review notes for the first cut are in
+   [`intrusive-queue.md`](intrusive-queue.md).
 2. **Cooperative cancellation and structured concurrency:** today, cancelling means destroying the frame. That stops
    working once I/O arrives: with io_uring the kernel holds pointers into your buffers until the CQE lands, so a
    frame with a read in flight can't just be destroyed. It needs a stop signal the operation observes, an

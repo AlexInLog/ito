@@ -82,7 +82,7 @@ static void bm_call_soon_before_noop_coro(benchmark::State& state)
     ito::loop loop{};
     for (auto _ : state)
     {
-        loop.call_soon([]() noexcept { });
+        const auto callback = loop.call_soon([]() noexcept { });
         loop.run_until_complete([]() -> ito::coro<> {
             co_return;
         }());
@@ -145,8 +145,8 @@ static void bm_resolve_future_inside_signal(benchmark::State& state)
     for (auto _ : state)
     {
         benchmark::DoNotOptimize(loop.run_until_complete([&loop]() -> ito::coro<int> {
-            auto [promise, f] = ito::async::promise<int>::create();
-            loop.call_soon([&]() noexcept { promise.set_result(10); });
+            auto [promise, f]  = ito::async::promise<int>::create();
+            const auto resolve = loop.call_soon([&]() noexcept { promise.set_result(10); });
             co_return co_await std::move(f);
         }()));
     }
@@ -249,15 +249,18 @@ BENCHMARK(bm_cancel_tasks_before_start)->Arg(16)->Arg(1024);
 // Many callbacks queued in one tick, drained before the coroutine queued behind them.
 static void bm_call_soon_burst(benchmark::State& state)
 {
-    ito::loop    loop{};
-    const auto   count   = state.range(0);
-    std::int64_t counter = 0;
+    ito::loop                            loop{};
+    const auto                           count   = state.range(0);
+    std::int64_t                         counter = 0;
+    std::vector<ito::scheduled_callback> callbacks{};
+    callbacks.reserve(static_cast<std::size_t>(count));
     for (auto _ : state)
     {
-        for (std::int64_t i = 0; i < count; ++i) loop.call_soon([&counter]() noexcept { ++counter; });
+        for (std::int64_t i = 0; i < count; ++i) callbacks.push_back(loop.call_soon([&counter]() noexcept { ++counter; }));
         loop.run_until_complete([]() -> ito::coro<> {
             co_return;
         }());
+        callbacks.clear();
     }
     benchmark::DoNotOptimize(counter);
     state.SetItemsProcessed(state.iterations() * count);
