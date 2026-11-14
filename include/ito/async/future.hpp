@@ -158,7 +158,7 @@ namespace ito::async
         };
     } // namespace details
 
-    template<typename T = void>
+    template<typename T>
     class future
     {
     public:
