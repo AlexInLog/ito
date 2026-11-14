@@ -63,7 +63,7 @@ namespace ito
         };
     } // namespace details
 
-    template<typename T = void>
+    template<typename T>
     class [[nodiscard("ito::coro object can't be discarded")]] coro final
     {
     public:
