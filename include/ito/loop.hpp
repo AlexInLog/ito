@@ -2,7 +2,6 @@
 
 #include <ito/coro.hpp>
 #include <ito/details/ready_node.hpp>
-#include <ito/details/utils/anchored.hpp>
 #include <ito/details/utils/finally.hpp>
 #include <ito/details/utils/intrusive_queue.hpp>
 #include <ito/details/utils/move_only_callback.hpp>
@@ -11,69 +10,36 @@
 #include <ito/fwd.hpp>
 #include <ito/task.hpp>
 
-#include <algorithm>
 #include <chrono>
 #include <concepts>
 #include <coroutine>
-#include <optional>
 #include <thread>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 namespace ito::details
 {
-    // A queued coroutine resume. Never a raw handle: the frame it resumes may be destroyed while it's queued, so the
-    // handle is anchored to that frame (an anchor lives in or next to it) and get() returns null once it's gone,
-    // turning the resume into a no-op. Resuming never throws: a coroutine body's exceptions are captured by its promise.
-    using queued_resume = utils::anchored<std::coroutine_handle<>>;
-
     // Callbacks must not throw (move_only_callback only accepts nothrow-invocable callables): nobody awaits a
     // callback, so its exception would otherwise unwind whichever run_until_complete() happens to be running,
     // destroying an unrelated coroutine.
     template<typename Fn>
     concept loop_callback = std::constructible_from<utils::move_only_callback, Fn&&>;
 
-    class timer_queue
+    // One pending sleep. It lives in the sleep's awaitable, in the sleeping frame, and points at that frame's promise:
+    // a frame destroys the awaitable, unlinking the timer, before its promise, so the pointer never dangles. Cancelling
+    // a sleep is just destroying its frame.
+    struct timer_node : utils::intrusive_queue_node
     {
-        struct entry
+        explicit timer_node(std::chrono::steady_clock::time_point deadline) noexcept
+            : deadline{deadline}
         {
-            std::chrono::steady_clock::time_point deadline;
-            queued_resume                         resume;
-        };
-
-        static constexpr bool later(const entry& a, const entry& b) { return a.deadline > b.deadline; }
-
-    public:
-        void push(std::chrono::steady_clock::time_point deadline, queued_resume resume)
-        {
-            m_entries.push_back(entry{.deadline = deadline, .resume = std::move(resume)});
-            std::push_heap(m_entries.begin(), m_entries.end(), later);
         }
 
-        [[nodiscard]] bool empty() const { return m_entries.empty(); }
+        static bool earlier(const timer_node& a, const timer_node& b) noexcept { return a.deadline < b.deadline; }
 
-        [[nodiscard]] std::chrono::steady_clock::time_point next_deadline() const { return m_entries.front().deadline; }
-
-        // Read separately from pop_earliest() so the resume can be moved out first and the entry dropped only once
-        // that succeeded: if moving it into the ready queue fails to allocate, the timer stays in place.
-        [[nodiscard]] queued_resume& earliest() { return m_entries.front().resume; }
-
-        void pop_earliest()
-        {
-            std::pop_heap(m_entries.begin(), m_entries.end(), later);
-            m_entries.pop_back();
-        }
-
-        // Only the earliest entries matter for how long the loop may sleep, so cancelled ones deeper in the
-        // heap are left in place until they surface here.
-        void drop_cancelled_earliest()
-        {
-            while (!m_entries.empty() && !m_entries.front().resume.get()) pop_earliest();
-        }
-
-    private:
-        std::vector<entry> m_entries{};
+        std::chrono::steady_clock::time_point deadline;
+        // the sleeping frame's promise, queued once the deadline passes; set when the frame suspends
+        intrusive_ready_node* frame{};
     };
 
     struct loop_internals;
@@ -157,28 +123,34 @@ namespace ito
             {
             }
 
-            auto operator co_await()
+            // A named member rather than a class local to operator co_await(): a local class can't have the member
+            // template await_suspend() needs. Returned as a prvalue, so it's never moved once its timer is linked.
+            class awaitable
             {
-                struct awaitable
+            public:
+                explicit awaitable(std::chrono::steady_clock::time_point deadline) noexcept
+                    : m_timer{deadline}
                 {
-                    [[nodiscard]] bool await_ready() const noexcept { return std::chrono::steady_clock::now() >= deadline; }
+                }
 
-                    void await_suspend(std::coroutine_handle<> h)
-                    {
-                        auto [resume, anchor] = details::queued_resume::create(h);
-                        frame_anchor.emplace(std::move(anchor));
-                        loop::current().m_timers.push(deadline, std::move(resume));
-                    }
+                [[nodiscard]] bool await_ready() const noexcept { return std::chrono::steady_clock::now() >= m_timer.deadline; }
 
-                    static constexpr void await_resume() noexcept { }
+                // Typed handle: the timer queues the sleeping frame's own node, which only ito coroutines have.
+                template<std::derived_from<details::base_promise_type> Promise>
+                void await_suspend(std::coroutine_handle<Promise> h)
+                {
+                    auto& l       = loop::current(); // throws before anything is linked
+                    m_timer.frame = &h.promise();
+                    l.m_timers.push_back_sorted(m_timer, details::timer_node::earlier);
+                }
 
-                    std::chrono::steady_clock::time_point deadline;
-                    // lives in the sleeping coroutine's frame, so its queued resume dies with that frame
-                    std::optional<details::utils::anchor> frame_anchor{};
-                };
+                static constexpr void await_resume() noexcept { }
 
-                return awaitable{.deadline = m_deadline};
-            }
+            private:
+                details::timer_node m_timer;
+            };
+
+            auto operator co_await() const noexcept { return awaitable{m_deadline}; }
 
         private:
             std::chrono::steady_clock::time_point m_deadline;
@@ -245,24 +217,19 @@ namespace ito
 
             while (!h.done() && (!m_queue.empty() || !m_timers.empty()))
             {
-                // if (!m_timers.empty())
-                // {
-                //     const auto now = std::chrono::steady_clock::now();
-                //     while (!m_timers.empty() && m_timers.next_deadline() <= now)
-                //     {
-                //         // emplace_back has no effect if it throws, so the resume only leaves the heap once it's queued
-                //         m_queue.emplace_back(std::in_place_type_t<details::queued_resume>{}, std::move(m_timers.earliest()));
-                //         m_timers.pop_earliest();
-                //     }
-                //
-                //     if (m_queue.empty())
-                //     {
-                //         m_timers.drop_cancelled_earliest();
-                //         if (!m_timers.empty())
-                //             std::this_thread::sleep_until(m_timers.next_deadline());
-                //         continue;
-                //     }
-                // }
+                if (!m_timers.empty())
+                {
+                    const auto now = std::chrono::steady_clock::now();
+                    while (!m_timers.empty() && m_timers.front().deadline <= now) m_queue.push_back(*m_timers.pop_front().frame);
+
+                    // Nothing moved, so m_timers is still non-empty. A cancelled sleep has already unlinked its timer, so
+                    // the front deadline belongs to a frame that's still waiting.
+                    if (m_queue.empty())
+                    {
+                        std::this_thread::sleep_until(m_timers.front().deadline);
+                        continue;
+                    }
+                }
 
                 // Runs only the entries ready when this tick started (including the timers just moved in);
                 // anything they schedule waits for the next tick, so timers are checked once per tick.
@@ -276,7 +243,8 @@ namespace ito
 
     private:
         details::utils::intrusive_queue<details::intrusive_ready_node> m_queue{};
-        details::timer_queue                                           m_timers{};
+        // sorted by deadline, earliest first; equal deadlines fire in the order they were set
+        details::utils::intrusive_queue<details::timer_node> m_timers{};
     };
 } // namespace ito
 

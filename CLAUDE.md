@@ -55,19 +55,29 @@ Repo: https://github.com/AlexInLog/ito
   coroutine is suspended `co_await`ing its `future` delivers `exceptions::broken_future` to that coroutine instead
   of leaving it suspended forever. `future<T>::operator co_await() &&` is rvalue-qualified, so single-consumption is
   enforced by the type system (move-only) rather than a runtime flag.
-- `task<T>` — created via `loop::create_task(coro<T>&&)`; the loop schedules it to start running on the next
-  `call_soon` tick, independent of whether/when it's `co_await`ed. Destroying the `task<T>` before it's awaited
+- `task<T>` — created via `loop::create_task(coro<T>&&)`; the loop queues it to start running on the next tick,
+  independent of whether/when it's `co_await`ed. Destroying the `task<T>` before it's awaited
   cancels it (the underlying coroutine handle is destroyed, so the body may never run past its next suspend point).
 - `details::utils::trackable<T>` — pairs an owning object with a single `weak_ref` that gets nulled out when the
   owner is destroyed or moved-from. Used for `future_state<T>` (shared by `promise`/`future`).
-- `details::utils::anchored<T>`/`anchor` — the reverse: the value travels with the `anchored<T>`, and `get()` returns
-  it only while its `anchor` exists. Every queued coroutine resume is an `anchored<std::coroutine_handle<>>`
-  (`details::queued_resume`), anchored to the frame it resumes, so the loop skips a resume whose frame was destroyed
-  while it was queued.
-- Both are built on `details::utils::linked<Tag, Side>` (`link_owner`/`link_follower`): an intrusive two-ended link
+- `trackable` is built on `details::utils::linked<Tag, Side>` (`link_owner`/`link_follower`): an intrusive two-ended link
   where each kind of link has its own tag. The two ends and different kinds of links are distinct types on purpose, so
   clang's type-based alias analysis can keep the pointers in registers; one symmetric type cost ~3x the instructions on
   the create/move/use path (see the comment in `linked.hpp`).
+- `details::utils::intrusive_queue<T>` — a circular doubly-linked list with a single sentinel. An unlinked node, like
+  an empty queue's sentinel, points at itself, so linking and unlinking never branch. A node unlinks itself in its
+  destructor, so whatever the loop reaches through a queue is alive. `consume()` runs only the nodes queued when it
+  started, using a marker node on the stack; that's the loop's tick. `push_back_sorted()` keeps a sorted queue
+  sorted by scanning from the back (O(1) for nodes arriving in order).
+- `details::intrusive_ready_node` — an entry in the loop's ready queue, with `virtual void run() noexcept`. Every
+  `coro<T>` promise is one (its `run()` resumes the frame), and so is `scheduled_callback`. A frame is only ever
+  queued through its own promise's node, at most once at a time.
+- `scheduled_callback` — returned by `loop::schedule(callback)`. It owns the callback and its queue node inline;
+  destroying it before the callback runs cancels the callback. Before running, it moves the callback out, so the
+  captures are released right after the run and a callback may destroy its own `scheduled_callback`.
+- `details::timer_node` — one pending sleep, living in the sleep's awaitable. It holds the deadline and a pointer to
+  the sleeping frame's promise; the loop keeps timers in an `intrusive_queue<timer_node>` sorted by deadline, and
+  moves a due timer's frame onto the ready queue.
 - `details::utils::outcome<T>` — the set-once result slot (`variant<monostate, T, exception_ptr, moved_out_t>`) behind
   both `coro<T>` promises and `future_state<T>`. `get_result()` returns `T` and marks the slot as taken (`moved_out_t`,
   distinct from `monostate`, which means never set), so a result can only be taken once: a second call reports "value
@@ -90,25 +100,28 @@ Repo: https://github.com/AlexInLog/ito
   Double-scheduling a resume (UB) is guarded by `future_state<T>::schedule_continuation()` clearing `continuation`
   the instant a resume is scheduled, not by checking `is_ready()` — if you change how `continuation` is consumed, make
   sure whatever claims it still clears it in the same step, or a promise resolved and destroyed in quick succession
-  will double-schedule its awaiter's resume. `continuation` is a plain `queued_resume` (empty, `get()` null, when
-  unset): `call_soon(std::move(continuation))` clears it by moving it, and only if queuing succeeds, since
-  `call_soon()` has no effect if it throws. So on failure the awaiter stays registered and the promise's destructor
-  can still deliver the result, rather than it being lost. Callers check `continuation.get()` before calling, and this
-  path is inlining-sensitive (see `docs/ideas.md`).
-- Every loop queue entry that resumes a coroutine must be a `details::queued_resume` (`anchored<coroutine_handle<>>`),
-  never a raw `std::coroutine_handle<>`: destroying a `task<T>` destroys its frame at whatever suspend point it's at,
-  and a raw handle queued before that would resume freed memory. The matching `anchor` must be dead whenever that
-  frame is destroyed: it lives in the frame (`future<T>`'s and `sleep_awaitable`'s awaitables) or next to whatever
-  destroys it (`task<T>` and its awaitable hold the frame's `raii_coroutine_handle` and the anchor side by side).
-- Exception policy: `loop::call_soon` only accepts coroutine entries or nothrow-invocable callbacks
-  (`details::loop_handle`/`details::loop_callback`). Errors travel through coroutines and promises, never out of a
-  callback: nobody awaits a callback, so a throw would unwind an unrelated `run_until_complete()`. The check is
-  compile-time only. Don't add `noexcept` to `loop_entry_executor`: it cost ~1.4 ns per callback for no extra safety.
-  Callbacks are stored as `details::utils::move_only_callback`, not `std::function`, so they can own move-only state:
-  the loop can't see what a callback references, and one queued by a coroutine may run after that coroutine is gone,
-  so callbacks should own what they touch (e.g. capture a promise by move) rather than capture frame locals by `&`.
-  `run_until_complete` still queues its coroutine as a `queued_resume`, because allocation failure inside the loop
-  can still unwind it.
+  will double-schedule its awaiter's resume. `continuation` is a plain `intrusive_ready_node*` (null when unset), and
+  `schedule_continuation()` takes it with `std::exchange(continuation, nullptr)` as it queues the frame. Queuing
+  only links a node, so it can't fail. Callers check `continuation` before calling, and this path is
+  inlining-sensitive (see `docs/ideas.md`). The pointer is null in two states, "nobody awaits yet" and "already
+  queued"; the outcome tells them apart, and the promise has nothing to do in either.
+- A pointer from one queue node to another (a future's `continuation`, a timer's `frame`) is only allowed when the
+  target outlives the holder. Today both live in the same coroutine frame: the pointer sits in an awaitable,
+  the target is that frame's promise, and a frame destroys its awaitables before its promise. Don't store such a
+  node anywhere outside the frame it points into (the old timer heap did, and needed `anchored` for it). Queues and
+  frames are free to die in any order, because every node unlinks itself on destruction.
+- `future<T>`'s and the sleep's awaitables take a typed `std::coroutine_handle<Promise>` with `Promise` derived from
+  `details::base_promise_type`: they queue the awaiting frame's own node, which only ito coroutines have. That's why
+  they're named nested classes rather than classes local to `operator co_await()`: a local class can't have member
+  templates.
+- Exception policy: `loop::schedule` only accepts nothrow-invocable callbacks (`details::loop_callback`). Errors
+  travel through coroutines and promises, never out of a callback: nobody awaits a callback, so a throw would unwind
+  an unrelated `run_until_complete()`. The check is compile-time only. Callbacks are stored as
+  `details::utils::move_only_callback`, not `std::function`, so they can own move-only state. A callback is
+  cancelled together with whatever owns its `scheduled_callback`, so it may reference that owner's state; the
+  contract to keep is that everything it touches outlives its `scheduled_callback`.
+- The loop's tick (`consume()` in `run_until_complete_impl`) stops as soon as the coroutine passed to
+  `run_until_complete` is done; the rest of the tick stays queued for a later run.
 - Capturing coroutine lambdas: a lambda's captures live in its closure object, not in the coroutine frame, so a
   temporary closure dies at the end of the statement that called it. `run_until_complete([&]() -> coro<> {...}())` is
   safe, because the statement only ends after the run. `create_task([&]() -> coro<> {...}())` is not: the task runs

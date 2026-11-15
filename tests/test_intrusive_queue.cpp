@@ -282,9 +282,10 @@ TEST_CASE("consume skips a node destroyed by the callback")
 
 namespace
 {
-    constexpr auto by_value = [](const node& a, const node& b) noexcept {
+    bool by_value(const node& a, const node& b) noexcept
+    {
         return a.value < b.value;
-    };
+    }
 
     std::vector<const node*> drain(ito::details::utils::intrusive_queue<node>& queue)
     {
