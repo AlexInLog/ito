@@ -10,18 +10,28 @@ is the short public checklist; this file keeps the reasoning behind it.
   mixed deadlines pay a scan each. If that shows up, the candidates are a pairing heap behind the same `timer_node`,
   or bucketing deadlines into a timer wheel. A wheel trades exact deadlines for a fixed resolution, so it belongs with
   the reactor, where thousands of socket timeouts make that trade worth it.
+- **Scheduled callbacks carry two layers of type erasure:** `scheduled_callback` is an `intrusive_ready_node`, with a
+  vtable for `run()`, and its `move_only_callback` adds two function pointers (`m_invoke`, `m_manage`). A handle is
+  56 bytes, and moving or destroying even a small capture-by-reference lambda is an indirect call. A burst of trivial
+  callbacks is about 2x slower than with the old deque. Some of that is the handle's own cost, but most is the list
+  itself: every push and pop goes through the sentinel, while a deque bumps a pointer. The plan is to fold
+  `move_only_callback` into `scheduled_callback` and let the node's vtable do run, move and destroy (8 + 16 + 16 =
+  40 bytes), plus a fast path for trivially copyable callables that copies their bytes on move and skips the
+  destructor. A prototype of the fast path alone cut 15-19% of the instructions on a burst of 1024 callbacks, with no
+  change in wall time, so this is about size and CodSpeed's instruction counts rather than speed.
 - **No benchmark with active timers:** the loop calls `steady_clock::now()` once per tick only when timers exist,
   and none of the current benchmarks create one, so that path is unmeasured.
 - **`linked` (behind `trackable`) and the intrusive queues are single-threaded by design:** non-atomic
   back-pointers, re-pointed on every move. Anything multi-threaded will need a different lifetime-tracking scheme (see
   the multi-threading step below).
-- **The promise's resolve path sits just under clang's inlining threshold:** `promise_base::set_result_impl` has an
-  inline cost of 245 against a threshold of 250. If it goes over, it stops being inlined and the future benchmarks
-  jump (resolving before await went from 211 to 297 instructions, +4.9 ns, during the `anchored` migration). Those
-  numbers predate the intrusive queue, which made the continuation a raw node pointer and queuing it `noexcept`;
-  the threshold hasn't been re-checked since. The throwing `loop::current()` lookup was the biggest single cost in
-  there. When changing that path, check
-  `-Rpass-missed=inline` for `set_result_impl` and compare instruction counts (`perf stat -e instructions:u`).
+- **The promise's resolve path used to sit just under clang's inlining threshold:** `promise_base::set_result_impl`
+  once had an inline cost of 245 against a threshold of 250. Going over stops it being inlined, and the future
+  benchmarks jump (resolving before await went from 211 to 297 instructions, +4.9 ns, during the `anchored`
+  migration). With the intrusive queue, the continuation is a raw node pointer and queuing it is a `noexcept` link,
+  so the cost dropped to 140 (215 on main right before the change), and `promise<T>::set_result` itself inlines into
+  its callers at 130-135. Before the change, the throwing `loop::current()` lookup was the biggest single cost in
+  there. When changing that path, check `-Rpass-missed=inline` for `set_result_impl` and compare
+  instruction counts (`perf stat -e cpu_core/instructions/u` on hybrid CPUs, `instructions:u` elsewhere).
 - **Destroying a task from inside its own body** isn't guarded: the frame would be destroyed while it's running.
 - **A scheduled callback can still dangle if its handle outlives what it references:** destroying a
   `scheduled_callback` cancels the callback, so one held as a coroutine's local can safely reference that
