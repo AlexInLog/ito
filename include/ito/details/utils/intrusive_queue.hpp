@@ -90,6 +90,27 @@ namespace ito::details::utils
             return n;
         }
 
+        template<typename TComp>
+            requires std::strict_weak_order<TComp, intrusive_queue_node, intrusive_queue_node>
+        void push_back_sorted_impl(intrusive_queue_node& node, const TComp& comp) noexcept
+        {
+            ITO_ASSERT(!node.is_linked());
+            // scan back to the last node that doesn't go after `node`, or the sentinel if they all do
+            auto* cur = m_sentinel.m_prev;
+            for (; cur != &m_sentinel; cur = cur->m_prev)
+            {
+                if (!comp(node, *cur))
+                    break;
+            }
+            node.insert_before(*cur->m_next);
+        }
+
+        intrusive_queue_node& front_impl() noexcept
+        {
+            ITO_ASSERT(!empty());
+            return *m_sentinel.m_next;
+        }
+
     private:
         intrusive_queue_node m_sentinel{};
     };
@@ -100,6 +121,24 @@ namespace ito::details::utils
     public:
         void push_back(T& node) noexcept { intrusive_queue_base::push_back_impl(node); }
         T&   pop_front() noexcept { return static_cast<T&>(intrusive_queue_base::pop_front_impl()); }
+
+        [[nodiscard]] T& front() noexcept { return static_cast<T&>(intrusive_queue_base::front_impl()); }
+
+        // Inserts `node` after the last node that doesn't go after it, so a queue sorted by comp stays sorted and equal
+        // nodes keep their arrival order. Scans from the back: O(1) when nodes arrive in order, O(n) at worst. Don't
+        // call it from inside consume() on this queue: the scan would reach consume()'s marker, which isn't a T.
+        template<typename TComp>
+            requires std::strict_weak_order<const TComp&, const T&, const T&>
+                  && std::is_nothrow_invocable_v<const TComp&, const T&, const T&>
+        void push_back_sorted(T& node, const TComp& comp) noexcept
+        {
+            intrusive_queue_base::push_back_sorted_impl(
+                node,
+                [&comp](const intrusive_queue_node& left, const intrusive_queue_node& right) noexcept {
+                    return comp(static_cast<const T&>(left), static_cast<const T&>(right));
+                }
+            );
+        }
 
         // Pops and passes to fn, in order, only the nodes queued when consume() was called; nodes pushed meanwhile, including a
         // re-pushed one, stay queued for the next call. A node is unlinked before fn sees it, so returning false (or throwing)

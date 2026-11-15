@@ -279,3 +279,84 @@ TEST_CASE("consume skips a node destroyed by the callback")
     REQUIRE(visited == std::vector<size_t>{1, 3});
     REQUIRE(queue.empty());
 }
+
+namespace
+{
+    constexpr auto by_value = [](const node& a, const node& b) noexcept {
+        return a.value < b.value;
+    };
+
+    std::vector<const node*> drain(ito::details::utils::intrusive_queue<node>& queue)
+    {
+        std::vector<const node*> out{};
+        while (!queue.empty()) out.push_back(&queue.pop_front());
+        return out;
+    }
+} // namespace
+
+TEST_CASE("push_back_sorted keeps the queue sorted")
+{
+    ito::details::utils::intrusive_queue<node> queue{};
+    node                                       v1{1};
+    node                                       v3{3};
+
+    SECTION("into an empty queue")
+    {
+        queue.push_back_sorted(v1, by_value);
+        REQUIRE(drain(queue) == std::vector<const node*>{&v1});
+    }
+
+    queue.push_back_sorted(v1, by_value);
+    queue.push_back_sorted(v3, by_value);
+
+    SECTION("a larger value goes to the back")
+    {
+        node v5{5};
+        queue.push_back_sorted(v5, by_value);
+        REQUIRE(drain(queue) == std::vector<const node*>{&v1, &v3, &v5});
+    }
+    SECTION("a smaller value goes to the front")
+    {
+        node v0{0};
+        queue.push_back_sorted(v0, by_value);
+        REQUIRE(drain(queue) == std::vector<const node*>{&v0, &v1, &v3});
+    }
+    SECTION("a value in between goes between")
+    {
+        node v2{2};
+        queue.push_back_sorted(v2, by_value);
+        REQUIRE(drain(queue) == std::vector<const node*>{&v1, &v2, &v3});
+    }
+    SECTION("an equal value goes after the existing ones")
+    {
+        node v1_again{1};
+        node v3_again{3};
+        queue.push_back_sorted(v3_again, by_value);
+        queue.push_back_sorted(v1_again, by_value);
+        REQUIRE(drain(queue) == std::vector<const node*>{&v1, &v1_again, &v3, &v3_again});
+    }
+}
+
+TEST_CASE("push_back_sorted orders values arriving in any order")
+{
+    ito::details::utils::intrusive_queue<node> queue{};
+    std::array<node, 6>                        vals{node{4}, node{1}, node{5}, node{1}, node{0}, node{3}};
+    for (auto& v : vals) queue.push_back_sorted(v, by_value);
+
+    // the two 1s keep their arrival order
+    REQUIRE(drain(queue) == std::vector<const node*>{&vals.at(4), &vals.at(1), &vals.at(3), &vals.at(5), &vals.at(0), &vals.at(2)});
+}
+
+TEST_CASE("front returns the next node without popping it")
+{
+    ito::details::utils::intrusive_queue<node> queue{};
+    node                                       v1{1};
+    node                                       v2{2};
+    queue.push_back(v1);
+    queue.push_back(v2);
+
+    REQUIRE(&queue.front() == &v1);
+    REQUIRE(v1.is_linked());
+    REQUIRE(&queue.pop_front() == &v1);
+    REQUIRE(&queue.front() == &v2);
+}
