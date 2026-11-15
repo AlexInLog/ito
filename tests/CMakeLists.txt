@@ -3,7 +3,7 @@ find_package(Catch2 REQUIRED)
 add_executable(ito_tests
     test_coro.cpp
     # test_loop.cpp
-    # test_future.cpp
+    test_future.cpp
     test_task.cpp
     # test_sleep.cpp
     # test_move_only_callback.cpp

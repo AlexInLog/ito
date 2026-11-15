@@ -79,12 +79,16 @@ namespace ito::details
     private:
         std::vector<entry> m_entries{};
     };
+
+    struct loop_internals;
 } // namespace ito::details
 
 namespace ito
 {
     class loop
     {
+        friend struct details::loop_internals;
+
         [[noreturn]] static inline void throw_loop_already_running()
         {
             throw exceptions::invalid_loop_state{"loop::run_until_complete() called from within an already-running loop on this thread"};
@@ -245,3 +249,12 @@ namespace ito
         details::timer_queue                                           m_timers{};
     };
 } // namespace ito
+
+namespace ito::details
+{
+    struct loop_internals
+    {
+        // Queues `node` to run on a later tick. Can't fail: queuing only links the node.
+        static void schedule(loop& l, intrusive_ready_node& node) noexcept { l.m_queue.push_back(node); }
+    };
+} // namespace ito::details
