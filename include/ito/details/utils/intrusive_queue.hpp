@@ -3,6 +3,7 @@
 #include <ito/assert.hpp>
 
 #include <concepts>
+#include <type_traits>
 #include <utility>
 
 namespace ito::details::utils
@@ -99,6 +100,32 @@ namespace ito::details::utils
     public:
         void push_back(T& node) noexcept { intrusive_queue_base::push_back_impl(node); }
         T&   pop_front() noexcept { return static_cast<T&>(intrusive_queue_base::pop_front_impl()); }
+
+        // Pops and passes to fn, in order, only the nodes queued when consume() was called; nodes pushed meanwhile, including a
+        // re-pushed one, stay queued for the next call. A node is unlinked before fn sees it, so returning false (or throwing)
+        // stops after that node and leaves the rest at the front. fn must not pop, consume or move this queue: the marker
+        // would be popped or left behind.
+        template<typename Fn>
+            requires std::is_invocable_r_v<bool, Fn, T&>
+        void consume(Fn&& fn) // NOLINT(cppcoreguidelines-missing-std-forward)
+        {
+            if (empty())
+                return;
+
+            // the marker isn't a T, so compare before casting; on early exit or a throw its destructor unlinks it
+            intrusive_queue_node marker{};
+            push_back_impl(marker);
+
+            while (true)
+            {
+                auto& node = pop_front_impl();
+                if (&node == &marker)
+                    return;
+
+                if (!fn(static_cast<T&>(node)))
+                    return;
+            }
+        }
     };
 
 } // namespace ito::details::utils
