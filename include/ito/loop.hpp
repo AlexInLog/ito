@@ -28,10 +28,6 @@ namespace ito::details
     // turning the resume into a no-op. Resuming never throws: a coroutine body's exceptions are captured by its promise.
     using queued_resume = utils::anchored<std::coroutine_handle<>>;
 
-    // Coroutine entries the loop can queue.
-    template<typename T>
-    concept loop_handle = std::same_as<T, queued_resume>;
-
     // Callbacks must not throw (move_only_callback only accepts nothrow-invocable callables): nobody awaits a
     // callback, so its exception would otherwise unwind whichever run_until_complete() happens to be running,
     // destroying an unrelated coroutine.
@@ -85,6 +81,42 @@ namespace ito::details
 
 namespace ito
 {
+
+    // A callback queued with loop::schedule(). It owns the callback and its queue node inline, so queuing allocates
+    // nothing beyond what move_only_callback needs. Destroying it cancels the callback if it hasn't run yet, so keep it
+    // alive until then; moving it keeps its place in the queue. It may outlive the loop: the loop unlinks it on
+    // destruction, and the callback then never runs.
+    class [[nodiscard("destroying a scheduled_callback cancels it")]] scheduled_callback final : private details::intrusive_ready_node
+    {
+        template<typename Fn>
+        scheduled_callback(details::utils::intrusive_queue<details::intrusive_ready_node>& queue, Fn&& callback)
+            : m_callback{std::forward<Fn>(callback)}
+        {
+            queue.push_back(*this);
+        }
+
+        // Runs a moved-out copy, so the captures are released as soon as the callback returns rather than when the
+        // scheduled_callback dies, and the callback may destroy its own scheduled_callback while it runs.
+        void run() noexcept override
+        {
+            auto callback = std::move(m_callback);
+            callback();
+        }
+
+    public:
+        friend class loop;
+
+        scheduled_callback(scheduled_callback&&) noexcept = default;
+        ~scheduled_callback() noexcept                    = default;
+
+        scheduled_callback(const scheduled_callback&)            = delete;
+        scheduled_callback& operator=(const scheduled_callback&) = delete;
+        scheduled_callback& operator=(scheduled_callback&&)      = delete;
+
+    private:
+        details::utils::move_only_callback m_callback;
+    };
+
     class loop
     {
         friend struct details::loop_internals;
@@ -173,16 +205,14 @@ namespace ito
             return ito::task<T>{static_cast<details::utils::raii_coroutine_handle<>>(std::move(h))};
         }
 
-        // A callback may run after the coroutine that queued it has finished (later in this run, or in a later
-        // run): own what it touches, e.g. capture a promise by move, rather than referencing a coroutine's locals.
+        // Runs `callback` on a later tick, unless the returned scheduled_callback is destroyed first. The callback is
+        // cancelled together with whatever owns its scheduled_callback, so it may reference that owner's state, e.g.
+        // a coroutine's locals when the scheduled_callback is one of them.
         template<typename Fn>
-            requires details::loop_handle<std::remove_cvref_t<Fn>> || details::loop_callback<Fn>
-        void call_soon([[maybe_unused]] Fn&& callback)
+            requires details::loop_callback<Fn>
+        scheduled_callback schedule(Fn&& callback)
         {
-            // if constexpr (details::loop_handle<std::remove_cvref_t<Fn>>)
-            //     m_queue.emplace_back(std::forward<Fn>(callback));
-            // else
-            //     m_queue.emplace_back(std::in_place_type_t<details::utils::move_only_callback>{}, std::forward<Fn>(callback));
+            return scheduled_callback{m_queue, std::forward<Fn>(callback)};
         }
 
         [[nodiscard]] static auto sleep_until(std::chrono::steady_clock::time_point deadline) { return sleep_awaitable{deadline}; }
