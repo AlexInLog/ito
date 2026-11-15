@@ -4,9 +4,108 @@ Findings from reviewing the first cut of `details/utils/intrusive_queue.hpp` and
 `use_intrusive`, on top of `465af1c`). The list itself is correct: a node destroyed while queued, the queue destroyed
 before its nodes, and a node destroyed during a drain all behave under ASan. What's left is wiring and invariants.
 
-Suggested order: the `ready_node` layer (unblocks `call_soon`), then the tick batch with splice-back and its test, then
-futures with a typed `await_suspend` and a weak node reference. The `ready_node` layer and RAII callbacks are done (see
-[Callbacks](#callbacks-scheduled_callback)).
+Done so far: the `ready_node` layer, RAII callbacks, and futures and timers on the new queue, so every test and
+benchmark is back. What's left is below; the sections after it keep the reasoning behind each item.
+
+## Remaining work
+
+Suggested order: 1 and 2 together (both touch the queue, and the batch needs splicing), then 10, then the quick
+decisions 3–5, then the docs 6–9 once the shape is final.
+
+Behaviour:
+
+1. **Tick batch with splice-back:** the loop drains one entry at a time and checks timers before each. Splice
+   `m_queue` into a batch, drain the batch, and splice what's left back to the front of `m_queue` when the drain stops
+   early (`h.done()`, or unwinding). Needs a `splice_front` on the queue; see
+   [Queue implementation](#queue-implementation) and item 3 under [Wiring](#wiring). The `[!shouldfail]`
+   timer-ordering test starts failing once this works: drop the tag then.
+2. **Re-pushing a queued node silently moves it to the back** (item 2 under Wiring). Assert `!is_linked()` instead.
+
+Decisions:
+
+3. **Callback burst regression:** `bm_call_soon_burst/1024` is 12.8 µs against 6.2 µs on `main`. About 2 ns per
+   callback is the move-out before running, kept on purpose; most of the rest is the benchmark moving every handle
+   into a `vector`. Accept it, or change the benchmark so it doesn't measure the vector.
+4. **Rename `call_soon`** (`schedule`, say): it's no longer fire-and-forget. Mechanical, touches every test.
+5. **Rename `details::queued_resume`:** it's now only a timer heap entry (`anchored<ready_node*>`), e.g.
+   `timer_entry`.
+
+Docs, before merging:
+
+6. **`CLAUDE.md` describes the old queue:** the `anchored`/`queued_resume` component entry, the double-scheduling and
+   queued-resume gotchas, and the exception policy (`loop_handle`, "callbacks should own what they touch",
+   `run_until_complete` queuing a `queued_resume`). Add `ready_node`, `scheduled_callback`, typed `await_suspend`, and
+   one node per frame.
+7. **`README.md`:** the `call_soon` notes describe fire-and-forget with a promise captured by move; they need the
+   keep-the-handle-alive semantics.
+8. **`docs/ideas.md` step 1** still says the node lives in the awaitable.
+
+Small things:
+
+9. **`assert.hpp`:** `ITO_ENSURE` has the dangling-else problem, calls `throw_ensure` unqualified, and has no caller
+   yet; `ITO_ASSERT` carries its own `;`. Details under [Small things](#small-things).
+10. **`tests/test_intrusive_queue.cpp`:** missing `<array>`, `<string>` and `std::size_t`; missing cases for pushing an
+    already-linked node, the queue destroyed before its nodes, a node destroyed mid-drain, the splice-back, and (with
+    the circular layout) moving an unlinked node and an empty queue.
+11. **The `else if` branch in `intrusive_queue_node::unlink()`** only the head sentinel can take. Comment it, or remove
+    it with the circular layout.
+
+## Queue implementation
+
+`intrusive_queue.hpp` is correct as written: every operation, moving a queue, destroying it with nodes linked, and the
+sentinels' destruction order check out, and ASan agrees. Improvements, in order of value:
+
+- **One circular sentinel instead of head and tail.** Today `head.m_prev` and `tail.m_next` are always null, and
+  `unlink()` (two checks), `insert_before()` (one) and `push_back` (which unlinks first) all branch on null. With one
+  sentinel in a circular list, and an unlinked node pointing at itself:
+
+  ```cpp
+  intrusive_queue_node() noexcept : m_next{this}, m_prev{this} {}
+  bool is_linked() const noexcept { return m_next != this; }
+
+  void unlink() noexcept {                       // no branches, idempotent
+      m_prev->m_next = m_next;
+      m_next->m_prev = m_prev;
+      m_next = m_prev = this;
+  }
+  void insert_before(intrusive_queue_node& pos) noexcept {
+      m_next = &pos; m_prev = pos.m_prev;
+      m_prev->m_next = this; pos.m_prev = this;
+  }
+
+  // queue: m_sentinel.m_next is the front, m_sentinel.m_prev the back; empty means the sentinel points at itself
+  bool empty() const noexcept  { return !m_sentinel.is_linked(); }
+  void push_back(node& n)      { ITO_ASSERT(!n.is_linked()); n.insert_before(m_sentinel); }
+  node& pop_front()            { auto& n = *m_sentinel.m_next; n.unlink(); return n; }
+  ```
+
+  Push becomes 4 stores, pop 2 loads and 4 stores, all without branches; the queue is 16 bytes smaller; the
+  head-only branch in `unlink()` goes away. Moving a queue becomes moving its sentinel, which the node's move
+  constructor does as long as it handles a self-linked source:
+
+  ```cpp
+  intrusive_queue_node(intrusive_queue_node&& o) noexcept {
+      if (!o.is_linked()) { m_next = m_prev = this; return; }
+      m_next = o.m_next; m_prev = o.m_prev;
+      m_next->m_prev = this; m_prev->m_next = this;
+      o.m_next = o.m_prev = &o;
+  }
+  ```
+
+  The subtle point: an empty queue and an unlinked node are the same state, a self-loop, which is why the move
+  constructor needs the `is_linked()` check.
+- **Assert on double-linking** (item 2): `is_linked()` makes it a one-line `ITO_ASSERT`, free in release. It also
+  catches pushing a node into one queue while it's still in another.
+- **Splicing** (item 1): `splice_front(intrusive_queue_base&)`, O(1). The batch is `auto batch = std::move(m_queue);`
+  (already works), then `m_queue.splice_front(batch)` on early exit, so the leftovers keep their place ahead of anything
+  queued during the tick. About 8 lines with the circular layout.
+- The destructor's pop-all loop is needed, not waste: it keeps a node from writing into a dead sentinel later. It stays
+  with the circular layout.
+- All the pointers are `intrusive_queue_node*`, so the distinct-types trick from `linked.hpp` doesn't apply: the
+  compiler must assume `n->m_prev = ...` may alias `this->m_next`. Inherent to a homogeneous list; don't expect the gains
+  `linked` got.
+- `intrusive_queue_node() = default;` isn't marked `noexcept` (it is implicitly). The circular layout needs a real
+  constructor anyway.
 
 ## Wiring
 
@@ -136,14 +235,11 @@ Done, everything except the tick batch, so all tests and benchmarks are back:
 Anything that goes through the queue is faster; the small losses on frame creation and the nested chain are the
 bigger promise (vptr and the node's two links). The callback burst is the one real regression (see above).
 
-Still open:
-
-- The tick batch, with the splice back on early exit (item 3 under Wiring).
-- Docs to update before merging: `CLAUDE.md` (the exception policy still mentions `loop_handle`, removed here, and says
-  callbacks should own what they touch; the queued-resume, double-scheduling and allocation-failure notes describe the
-  old queue) and the README's `call_soon` notes.
+What's still open is tracked under [Remaining work](#remaining-work).
 
 ## Small things
+
+Items 9–11 under [Remaining work](#remaining-work) track what's still open here.
 
 - `ITO_ENSURE`:
   - `if (!(c)) throw_ensure(...);` has the dangling-else problem: `if (a) ITO_ENSURE(b); else ...` binds the `else` to
@@ -159,8 +255,5 @@ Still open:
   - It's missing `<array>` and `<string>`, and uses unqualified `size_t`.
   - Missing cases: pushing an already-linked node, the queue destroyed before its nodes, a node destroyed mid-drain,
     and the splice back after the drain stops early.
-- WIP leftovers to clean up before merging:
-  - the tests commented out in `tests/CMakeLists.txt`;
-  - the commented-out timer block and old `m_queue` in `loop.hpp`, and the commented-out body of `call_soon`;
-  - `[[maybe_unused]]` on `call_soon`'s parameter;
-  - an extra blank line at the top of `loop.hpp`.
+- WIP leftovers from the first cut (commented-out tests, timer block and `call_soon` body, `[[maybe_unused]]`, the
+  extra blank line): all cleaned up.
