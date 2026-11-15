@@ -12,9 +12,9 @@ is the short public checklist; this file keeps the reasoning behind it.
   the reactor, where thousands of socket timeouts make that trade worth it.
 - **No benchmark with active timers:** the loop calls `steady_clock::now()` once per tick only when timers exist,
   and none of the current benchmarks create one, so that path is unmeasured.
-- **`linked` (behind `trackable`) and the intrusive queues are single-threaded by design:** non-atomic back-pointers, re-pointed
-  on every move. Anything multi-threaded will need a different lifetime-tracking scheme (see the multi-threading step
-  below).
+- **`linked` (behind `trackable`) and the intrusive queues are single-threaded by design:** non-atomic
+  back-pointers, re-pointed on every move. Anything multi-threaded will need a different lifetime-tracking scheme (see
+  the multi-threading step below).
 - **The promise's resolve path sits just under clang's inlining threshold:** `promise_base::set_result_impl` has an
   inline cost of 245 against a threshold of 250. If it goes over, it stops being inlined and the future benchmarks
   jump (resolving before await went from 211 to 297 instructions, +4.9 ns, during the `anchored` migration). Those

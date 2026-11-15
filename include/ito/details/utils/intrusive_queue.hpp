@@ -51,9 +51,11 @@ namespace ito::details::utils
         }
 
     private:
-        // Never null: an unlinked node, like an empty queue's sentinel, points at itself.
-        intrusive_queue_node* m_next = this;
-        intrusive_queue_node* m_prev = this;
+        // Never null: an unlinked node, like an empty queue's sentinel, points at itself. Mutable because the links
+        // aren't part of the object's value: neighbours relink a node at any time, and a const node (e.g. a
+        // `const auto` scheduled_callback) would otherwise be a const object modified after construction.
+        mutable intrusive_queue_node* m_next = this;
+        mutable intrusive_queue_node* m_prev = this;
     };
 
     class intrusive_queue_base
@@ -128,9 +130,8 @@ namespace ito::details::utils
         // nodes keep their arrival order. Scans from the back: O(1) when nodes arrive in order, O(n) at worst. Don't
         // call it from inside consume() on this queue: the scan would reach consume()'s marker, which isn't a T.
         template<typename TComp>
-            requires std::strict_weak_order<const TComp&, const T&, const T&>
-                  && std::is_nothrow_invocable_v<const TComp&, const T&, const T&>
-        void push_back_sorted(T& node, const TComp& comp) noexcept
+            requires std::strict_weak_order<TComp&, const T&, const T&> && std::is_nothrow_invocable_v<TComp&, const T&, const T&>
+        void push_back_sorted(T& node, TComp comp) noexcept
         {
             intrusive_queue_base::push_back_sorted_impl(
                 node,

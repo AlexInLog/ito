@@ -143,7 +143,7 @@ namespace ito::async
         };
     } // namespace details
 
-    template<typename T>
+    template<typename T = void>
     class future
     {
         // A named member rather than a class local to operator co_await(): a local class can't have the member

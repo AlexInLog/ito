@@ -80,7 +80,8 @@ namespace ito
         scheduled_callback& operator=(scheduled_callback&&)      = delete;
 
     private:
-        details::utils::move_only_callback m_callback;
+        // mutable for the same reason as the node's links: run() moves it out even from a `const auto` handle
+        mutable details::utils::move_only_callback m_callback;
     };
 
     class loop

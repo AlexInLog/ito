@@ -18,6 +18,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 
 TEST_CASE("loop bounds self to current")
@@ -296,4 +297,90 @@ TEST_CASE("a timer that expires during a tick resumes on the next tick, after wo
         co_await ito::async::sleep_until(deadline);
         mock.call(4);
     }());
+}
+
+TEST_CASE("run_until_complete stops as soon as its coroutine is done, leaving the rest of the tick queued")
+{
+    ito::loop             loop{};
+    call_mock             mock{};
+    trompeloeil::sequence s{};
+
+    // held out here, so they outlive the coroutine and `queued_behind` can still run in the next run
+    std::optional<ito::scheduled_callback> resolve{};
+    std::optional<ito::scheduled_callback> queued_behind{};
+
+    loop.run_until_complete([&]() -> ito::coro<> {
+        auto [promise, future] = ito::async::promise<>::create();
+        resolve.emplace(loop.schedule([&]() noexcept {
+            // queues this coroutine, then `queued_behind` after it, both for the next tick
+            promise.set_result();
+            queued_behind.emplace(loop.schedule([&]() noexcept { mock.call(1); }));
+        }));
+        co_await std::move(future);
+    }());
+
+    // the coroutine finished first in its tick, so `queued_behind` hasn't run; it runs first in the next run
+    REQUIRE_CALL(mock, call(1)).IN_SEQUENCE(s);
+    REQUIRE_CALL(mock, call(2)).IN_SEQUENCE(s);
+    loop.run_until_complete([&]() -> ito::coro<> {
+        mock.call(2);
+        co_return;
+    }());
+}
+
+TEST_CASE("a running callback may destroy scheduled callbacks")
+{
+    ito::loop loop{};
+    auto      token = std::make_shared<int>(0);
+
+    SECTION("its own: it keeps running, and its captures are released once it returns")
+    {
+        std::optional<ito::scheduled_callback> self{};
+        self.emplace(loop.schedule([&self, token]() noexcept {
+            self.reset();
+            ++*token;
+        }));
+        loop.run_until_complete([]() -> ito::coro<> {
+            co_return;
+        }());
+
+        REQUIRE_FALSE(self.has_value());
+        REQUIRE(*token == 1);
+        REQUIRE(token.use_count() == 1);
+    }
+    SECTION("one still queued behind it, which then never runs")
+    {
+        std::optional<ito::scheduled_callback> second{};
+        const auto                             first = loop.schedule([&second]() noexcept { second.reset(); });
+        second.emplace(loop.schedule([token]() noexcept { ++*token; }));
+        loop.run_until_complete([]() -> ito::coro<> {
+            co_return;
+        }());
+
+        REQUIRE(*token == 0);
+        REQUIRE(token.use_count() == 1);
+    }
+}
+
+TEST_CASE("moving a queued scheduled_callback keeps its place in the queue")
+{
+    ito::loop        loop{};
+    std::vector<int> order{};
+
+    std::optional<ito::scheduled_callback> first{};
+    std::optional<ito::scheduled_callback> second{};
+    std::optional<ito::scheduled_callback> third{};
+    first.emplace(loop.schedule([&order]() noexcept { order.push_back(1); }));
+    second.emplace(loop.schedule([&order]() noexcept { order.push_back(2); }));
+    third.emplace(loop.schedule([&order]() noexcept { order.push_back(3); }));
+
+    // moved after `third` was queued: it must still run between `first` and `third`
+    std::optional<ito::scheduled_callback> moved{};
+    moved.emplace(std::move(*second));
+    second.reset();
+
+    loop.run_until_complete([]() -> ito::coro<> {
+        co_return;
+    }());
+    REQUIRE(order == std::vector<int>{1, 2, 3});
 }

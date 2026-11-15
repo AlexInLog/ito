@@ -95,7 +95,7 @@ TEST_CASE("future basics")
         );
     }
 
-    SECTION("resolve future inside call_soon")
+    SECTION("resolve future inside a scheduled callback")
     {
         const auto res = loop.run_until_complete([&]() -> ito::coro<int> {
             auto [promise, fut] = ito::async::promise<int>::create();

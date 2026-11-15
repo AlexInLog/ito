@@ -90,21 +90,23 @@ TEST_CASE("resolving a future queues its awaiter without allocating")
     REQUIRE(received == 42);
 }
 
-TEST_CASE("a callback that fails to allocate is never queued")
+TEST_CASE("a callback that fails to allocate throws from schedule() and leaves the loop usable")
 {
     ito::loop           loop{};
     std::array<int, 16> padding{}; // too big to store inline, so schedule() allocates
-    bool                ran = false;
 
     auto queue_big_callback = [&]() {
         g_fail_next_allocation = true;
-        return loop.schedule([&ran, padding]() noexcept { ran = padding.front() == 0; });
+        return loop.schedule([padding]() noexcept { static_cast<void>(padding); });
     };
     REQUIRE_THROWS_AS(queue_big_callback(), std::bad_alloc);
     g_fail_next_allocation = false;
 
+    // nothing half-queued is left behind: a callback scheduled afterwards runs, and the run ends normally
+    bool       ran   = false;
+    const auto after = loop.schedule([&ran]() noexcept { ran = true; });
     loop.run_until_complete([]() -> ito::coro<> {
         co_return;
     }());
-    REQUIRE_FALSE(ran);
+    REQUIRE(ran);
 }

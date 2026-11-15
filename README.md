@@ -30,6 +30,9 @@ What exists right now:
   without being awaited, the exception is dropped silently.
 - `ito::async::sleep_for`/`ito::async::sleep_until` — suspend a coroutine until a duration elapses or a
   `steady_clock` deadline is reached, backed by a timer queue on `ito::loop`.
+- A `future<T>` or a sleep can only be awaited from an ito coroutine (`coro<T>`, or a task's body): waking it queues
+  the awaiting coroutine's own node, which other coroutine types don't have. Awaiting one from a different coroutine
+  type is a compile error.
 - `loop.schedule(callback)` — queues a plain callback to run on the next tick and returns an
   `ito::scheduled_callback`. Destroying that handle before the callback runs cancels it, so keep it alive until
   then; the compiler warns if you discard it. Callbacks must be `noexcept` (enforced at compile time): nothing awaits
