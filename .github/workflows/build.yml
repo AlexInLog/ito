@@ -18,6 +18,11 @@ env:
   # Bumped when a runner image changes: the cache keys don't include the image version, and packages built on one
   # OS release can't be reused on another. Images are pinned below rather than *-latest so they only change on purpose.
   HASH_NUMBER : 2
+  # Only ccache's directory is cached between runs, not ./build/: a checkout gives every source a new mtime, so ninja
+  # rebuilds everything anyway, and a restored build tree would bring a stale CMakeCache.txt and stale coverage profiles.
+  # Keyed by commit so every run saves a fresh cache (an exact key hit never saves), restored from the newest one.
+  CCACHE_DIR: "${{ github.workspace }}/.ccache"
+  CCACHE_MAXSIZE: 500M
 
 jobs:
   tests:
@@ -26,8 +31,10 @@ jobs:
         config:
         - { name: lint-ubuntu-gcc,   os: ubuntu-26.04,  compiler: gcc,          lint: true,  configurePreset: lint,            testPreset: tests }
         - { name: lint-ubuntu-clang, os: ubuntu-26.04,  compiler: llvm,         lint: true,  configurePreset: lint,            testPreset: tests  }
-        - { name: lint-windows,      os: windows-2025-vs2026, compiler: msvc,         lint: false, configurePreset: debug-tests,     testPreset: tests   }
+        - { name: tests-windows,     os: windows-2025-vs2026, compiler: msvc,         lint: false, configurePreset: debug-tests,     testPreset: tests   }
         - { name: lint-macos,        os: macos-26,        compiler: apple-clang,  lint: true,  configurePreset: lint,            testPreset: tests   }
+        - { name: release-ubuntu-gcc, os: ubuntu-26.04, compiler: gcc,          lint: false, configurePreset: release-tests,   testPreset: tests      }
+        - { name: sanitize-asan-gcc, os: ubuntu-26.04,  compiler: gcc,          lint: false, configurePreset: sanitize-asan,   testPreset: sanitize   }
         - { name: sanitize-tsan,     os: ubuntu-26.04,  compiler: llvm,         lint: false, configurePreset: sanitize-tsan,   testPreset: sanitize   }
         - { name: sanitize-asan,     os: ubuntu-26.04,  compiler: llvm,         lint: false, configurePreset: sanitize-asan,   testPreset: sanitize   }
         - { name: sanitize-lsan,     os: ubuntu-26.04,  compiler: llvm,         lint: false, configurePreset: sanitize-lsan,   testPreset: sanitize   }
@@ -40,23 +47,13 @@ jobs:
         with:
           fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
 
-      - name: Build cache
+      - name: ccache
+        if: ${{ !startsWith(matrix.config.os, 'windows') }} # no ccache on the MSVC job
         uses: actions/cache@v5
         with:
-          path: |
-            ./build/
-            ~/vcpkg
-            ~/.cache/vcpkg/archives
-            ${{ env.LOCALAPPDATA }}/vcpkg/archives
-            ${{ env.APPDATA }}/vcpkg/archives
-            ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
-            ~/.cache/ccache
-            ~/.ccache
-            ~/.config/ccache
-            ~/Library/Caches/ccache
-            ${{ env.LOCALAPPDATA }}/ccache
-            ${{ env.XDG_CACHE_HOME }}/ccache
-          key: ${{ runner.os }}-deps-tests--${{ matrix.config.name }}-${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}-${{ env.HASH_NUMBER}}
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.config.name }}-${{ github.sha }}
+          restore-keys: ccache-${{ matrix.config.name }}-
 
       - name: Setup Cpp
         if: ${{ !startsWith(matrix.config.os, 'windows') }}
@@ -73,7 +70,7 @@ jobs:
         with: { python-version: "3.14.10" }
 
       - name: get conan
-        uses: turtlebrowser/get-conan@main
+        run: pip install conan
 
       - name: check conan cache
         uses: actions/cache@v5
@@ -105,23 +102,12 @@ jobs:
         with:
           fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
 
-      - name: Build cache
+      - name: ccache
         uses: actions/cache@v5
         with:
-          path: |
-            ./build/
-            ~/vcpkg
-            ~/.cache/vcpkg/archives
-            ${{ env.LOCALAPPDATA }}/vcpkg/archives
-            ${{ env.APPDATA }}/vcpkg/archives
-            ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
-            ~/.cache/ccache
-            ~/.ccache
-            ~/.config/ccache
-            ~/Library/Caches/ccache
-            ${{ env.LOCALAPPDATA }}/ccache
-            ${{ env.XDG_CACHE_HOME }}/ccache
-          key: ${{ runner.os }}-deps-coverage--${{ hashFiles('**/conanfile.py') }}-${{ hashFiles('**/CMakePresets.json') }}-${{ env.HASH_NUMBER}}
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-coverage-${{ github.sha }}
+          restore-keys: ccache-coverage-
 
       - name: Setup Cpp
         uses: aminya/setup-cpp@v1

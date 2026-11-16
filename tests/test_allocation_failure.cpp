@@ -34,6 +34,13 @@ void* operator new(std::size_t size)
     throw std::bad_alloc{};
 }
 
+// GCC inlines these into new-expression sites and then reports free() on a pointer from operator new as mismatched,
+// although the replacement operator new above allocates with malloc().
+#if defined(__GNUC__) && !defined(__clang__)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#endif
+
 void operator delete(void* ptr) noexcept
 {
     std::free(ptr); // NOLINT(cppcoreguidelines-no-malloc,cppcoreguidelines-owning-memory)
@@ -43,6 +50,10 @@ void operator delete(void* ptr, std::size_t) noexcept
 {
     std::free(ptr); // NOLINT(cppcoreguidelines-no-malloc,cppcoreguidelines-owning-memory)
 }
+
+#if defined(__GNUC__) && !defined(__clang__)
+    #pragma GCC diagnostic pop
+#endif
 
 TEST_CASE("sleeping registers and fires its timer without allocating")
 {

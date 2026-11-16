@@ -6,15 +6,13 @@ class ItoConan(ConanFile):
     name = "ito"
     version = "0.1.0"
     settings = "os", "compiler", "build_type", "arch"
-    generators = "CMakeDeps", "CMakeToolchain", "CMakeConfigDeps"
+    generators = "CMakeToolchain", "CMakeConfigDeps"
 
     options = {
         "with_tests": [True, False],
-        "with_benchmarks": [True, False],
     }
     default_options = {
         "with_tests": False,
-        "with_benchmarks": False,
     }
 
     def requirements(self):

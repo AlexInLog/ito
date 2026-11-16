@@ -6,6 +6,7 @@ add_executable(ito_benchmarks
 target_link_libraries(ito_benchmarks
     PRIVATE
         ito
+        ito_project_options
         benchmark::benchmark_main
 )
 
