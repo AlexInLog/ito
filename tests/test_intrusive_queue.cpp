@@ -67,12 +67,13 @@ TEST_CASE("destroying a queued node removes it and keeps the others in order")
 
 TEST_CASE("moving an intrusive queue")
 {
-    ito::details::utils::intrusive_queue<node> q{};
-
+    // each section owns its queue: a queue shared across sections reads, to a static analyzer that runs the sections
+    // in one pass, as still linked to the previous section's dead nodes
     SECTION("with nodes moves them over in order and leaves an empty queue")
     {
-        node v1{1};
-        node v2{2};
+        ito::details::utils::intrusive_queue<node> q{};
+        node                                       v1{1};
+        node                                       v2{2};
         q.push_back(v1);
         q.push_back(v2);
 
@@ -85,7 +86,8 @@ TEST_CASE("moving an intrusive queue")
     }
     SECTION("an empty one leaves both queues usable")
     {
-        auto new_q = std::move(q);
+        ito::details::utils::intrusive_queue<node> q{};
+        auto                                       new_q = std::move(q);
         REQUIRE(q.empty()); // NOLINT(bugprone-use-after-move)
         REQUIRE(new_q.empty());
 

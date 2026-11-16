@@ -22,7 +22,8 @@ namespace ito::details::utils
             m_next = std::exchange(o.m_next, &o);
             m_prev = std::exchange(o.m_prev, &o);
 
-            m_next->m_prev = m_prev->m_next = this;
+            m_next->m_prev = this;
+            m_prev->m_next = this;
         }
         intrusive_queue_node& operator=(const intrusive_queue_node&) = delete;
         intrusive_queue_node& operator=(intrusive_queue_node&&)      = delete;
@@ -39,7 +40,8 @@ namespace ito::details::utils
         {
             m_next->m_prev = m_prev;
             m_prev->m_next = m_next;
-            m_next = m_prev = this;
+            m_next         = this;
+            m_prev         = this;
         }
 
         void insert_before(intrusive_queue_node& pos) noexcept
@@ -61,8 +63,12 @@ namespace ito::details::utils
     class intrusive_queue_base
     {
     public:
-        intrusive_queue_base(const intrusive_queue_base&)            = delete;
-        intrusive_queue_base(intrusive_queue_base&& o) noexcept      = default;
+        intrusive_queue_base(const intrusive_queue_base&) = delete;
+        // Moving the sentinel relinks the first and last nodes to the new queue and leaves `o` empty.
+        intrusive_queue_base(intrusive_queue_base&& o) noexcept
+            : m_sentinel{std::move(o.m_sentinel)}
+        {
+        }
         intrusive_queue_base& operator=(const intrusive_queue_base&) = delete;
         intrusive_queue_base& operator=(intrusive_queue_base&&)      = delete;
 
