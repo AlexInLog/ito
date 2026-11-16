@@ -25,9 +25,14 @@ Repo: https://github.com/AlexInLog/ito
 - Day-to-day local builds use the `release` or `lint` configure presets (`lint` adds clang-tidy + cppcheck), build
   preset `build`, test preset `tests`. `CMakeUserPresets.json` stays empty (`{"version": 4}`) — there's no local
   `default` preset in use.
-- CI runs a GCC/Clang/MSVC/AppleClang matrix via GitHub Actions (`lint-ubuntu-gcc`, `lint-ubuntu-clang`, `lint-windows`,
-  `lint-macos`, plus one job per sanitizer), all using `buildPreset: build`. `sanitize-msan` exists as a preset but is
-  **not** run in CI.
+- CI runs a GCC/Clang/MSVC/AppleClang matrix via GitHub Actions (`lint-ubuntu-gcc`, `lint-ubuntu-clang`, `tests-windows`,
+  `lint-macos`, `release-ubuntu-gcc`, one clang job per sanitizer, plus `sanitize-asan-gcc`), all using
+  `buildPreset: build`. `sanitize-msan` exists as a preset but is **not** run in CI. CI caches only ccache's directory
+  (keyed by commit, restored by prefix) and the Conan home, never `./build/`.
+- `ito_project_options` (warnings, `-fno-rtti`, sanitizers, coverage) is linked to the tests, examples and benchmarks
+  individually, never to `ito`: as an INTERFACE dependency it would reach every project that embeds ito.
+- `conan_provider.cmake` is pinned to a cmake-conan `develop2` commit with a SHA256 check, and only downloaded when ito
+  is the top-level project. To update it, change the commit and the hash together.
 
 ## Directory layout
 

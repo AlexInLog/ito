@@ -1,19 +1,23 @@
 # ── cmake-conan ────────────────────────────────────────────────────────────────
-if(NOT EXISTS "${CMAKE_BINARY_DIR}/conan_provider.cmake")
-    message(STATUS "Downloading cmake-conan conan_provider.cmake...")
+# Only when ito is the top-level project: a project embedding ito via add_subdirectory/FetchContent resolves its own
+# dependencies, and the provider would have no effect there anyway (it only hooks the first project() call).
+# Pinned to a develop2 commit (cmake-conan has no Conan 2 releases) and hash-checked, since the file runs as part of the
+# build. file(DOWNLOAD) skips the download when the file already exists with this hash.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     file(DOWNLOAD
-        "https://raw.githubusercontent.com/conan-io/cmake-conan/refs/heads/develop2/conan_provider.cmake"
+        "https://raw.githubusercontent.com/conan-io/cmake-conan/b1593849dd842c37ff198b9d3e7a6d4e03803121/conan_provider.cmake"
         "${CMAKE_BINARY_DIR}/conan_provider.cmake"
+        EXPECTED_HASH SHA256=63caaf42c06620d4f6139a0e17b3442738570fb9b123585ba8247afc322f8789
         TLS_VERIFY ON
     )
+    set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES "${CMAKE_BINARY_DIR}/conan_provider.cmake")
 endif()
-set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES "${CMAKE_BINARY_DIR}/conan_provider.cmake")
 
 cmake_minimum_required(VERSION 3.25)
 
 project(ito
     VERSION 0.1.0
-    DESCRIPTION "C++20 async runtime with work-stealing scheduler"
+    DESCRIPTION "C++20 coroutine-based async runtime"
     LANGUAGES CXX
 )
 
@@ -48,6 +52,8 @@ option(ITO_ENABLE_MSAN "Enable MemorySanitizer" OFF)
 option(ITO_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 option(ITO_ENABLE_COVERAGE "Enable coverage instrumentation" OFF)
 
+# Warnings, sanitizers and coverage for this repository's own targets (tests, examples, benchmarks). Deliberately not
+# linked to `ito`: an INTERFACE dependency would push -Werror, -fno-rtti and the sanitizers onto every consumer.
 add_library(ito_project_options INTERFACE)
 if(MSVC)
 
@@ -113,6 +119,8 @@ if(ITO_ENABLE_UBSAN)
     target_compile_options(ito_project_options INTERFACE
         -fsanitize=undefined
         -fno-sanitize-recover=undefined
+        -fno-omit-frame-pointer
+        -g
     )
 
     target_link_options(ito_project_options INTERFACE
@@ -160,7 +168,6 @@ target_include_directories(ito INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(ito INTERFACE ito_project_options)
 
 # ── Tests ──────────────────────────────────────────────────────────────────────
 if(ITO_BUILD_TESTS)
@@ -193,6 +200,8 @@ if(ITO_BUILD_TESTS)
             COMMAND llvm-profdata merge -o ${ITO_TEST_RESULTS_DIR}/results.profdata ${ITO_TEST_RESULTS_DIR}/*.profraw
             COMMAND llvm-cov report --ignore-filename-regex=${CMAKE_BINARY_DIR} ${ITO_COVERAGE_TARGETS}
             COMMAND llvm-cov show --ignore-filename-regex=${CMAKE_BINARY_DIR} --show-branches=count -show-instantiations=false ${ITO_COVERAGE_TARGETS} > ${ITO_TEST_RESULTS_DIR}/coverage.txt
+            # Consume the raw profiles, so a later report doesn't merge in profiles from binaries that were rebuilt since.
+            COMMAND ${CMAKE_COMMAND} -E rm -f ${ITO_TEST_RESULTS_DIR}/*.profraw
             COMMENT "Generating coverage report"
         )
 endif()
