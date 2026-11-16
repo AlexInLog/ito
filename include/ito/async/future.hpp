@@ -1,14 +1,13 @@
 #pragma once
 
-#include <ito/details/utils/anchored.hpp>
 #include <ito/details/utils/outcome.hpp>
 #include <ito/details/utils/trackable.hpp>
 #include <ito/fwd.hpp>
 #include <ito/loop.hpp>
 
+#include <concepts>
 #include <coroutine>
 #include <exception>
-#include <optional>
 #include <utility>
 
 namespace ito::exceptions
@@ -27,19 +26,17 @@ namespace ito::async
         struct future_state
         {
             ito::details::utils::outcome<T> value{};
-            // The awaiting coroutine's resume, anchored to its frame (the anchor lives in the awaitable) rather than a
-            // raw handle: once scheduled, the loop skips the resume if that frame was destroyed meanwhile.
-            // Empty (get() returns null) until a coroutine awaits, and again once its resume is queued.
-            ito::details::queued_resume continuation{};
+            // The awaiting frame's ready-queue node. This state lives in the awaitable, in that same frame, so the
+            // pointer can't outlive the frame. Null until a coroutine awaits, and again once its resume is queued.
+            ito::details::intrusive_ready_node* continuation{};
 
-            // Queues the awaiting coroutine's resume and clears `continuation` in the same step, so it can never be
-            // scheduled twice. call_soon() has no effect if it throws, so on failure `continuation` stays registered
-            // and a later attempt (the promise's destructor) can still deliver the result. Callers check that a
+            // Queues the awaiting frame and clears `continuation` in the same step. That's what keeps a frame from
+            // being queued twice: once its node has been popped and run, the node no longer says whether it's
+            // waiting on this future, so "is it already linked?" can't stand in for this. Callers check that a
             // continuation is set: it keeps this out of the resolve path's inlining budget twice.
-            void schedule_continuation(ito::loop& loop)
+            void schedule_continuation(ito::loop& loop) noexcept
             {
-                // the moved-from continuation is empty, so moving it into the queue clears it in the same step
-                loop.call_soon(std::move(continuation));
+                ito::details::loop_internals::schedule(loop, *std::exchange(continuation, nullptr));
             }
         };
 
@@ -79,7 +76,7 @@ namespace ito::async
                 if (const auto ptr = m_value.get())
                 {
                     // looked up before the value changes, so a missing loop throws before anything is set
-                    const auto loop = ptr->continuation.get() ? &ito::loop::current() : nullptr;
+                    const auto loop = ptr->continuation ? &ito::loop::current() : nullptr;
                     ptr->value.set_result(std::forward<TT>(v)...);
                     if (loop)
                         ptr->schedule_continuation(*loop);
@@ -90,7 +87,7 @@ namespace ito::async
             {
                 if (const auto ptr = m_value.get())
                 {
-                    const auto loop = ptr->continuation.get() ? &ito::loop::current() : nullptr;
+                    const auto loop = ptr->continuation ? &ito::loop::current() : nullptr;
                     ptr->value.set_exception(err);
                     if (loop)
                         ptr->schedule_continuation(*loop);
@@ -113,8 +110,8 @@ namespace ito::async
 
         private:
             // The broken-future notification is kept out of ~promise_base(): it only runs when the
-            // promise dies with a coroutine still waiting on it, and inlining it (call_soon() plus the
-            // try/catch) is what stops the destructor itself from being inlined into its caller.
+            // promise dies with a coroutine still waiting on it, and inlining it (building the exception
+            // plus the try/catch) is what stops the destructor itself from being inlined into its caller.
             static void notify_broken_future(details::future_state<T>* ptr) noexcept
             {
                 if (!ptr->value.is_settled()) [[unlikely]]
@@ -134,23 +131,11 @@ namespace ito::async
                     }
                 }
 
-                if (!ptr->continuation.get()) [[likely]]
+                if (!ptr->continuation) [[likely]]
                     return;
 
                 if (const auto loop = ito::loop::try_current()) [[likely]]
-                {
-                    // call_soon() can throw (e.g. std::bad_alloc from the queue); swallow it
-                    // rather than let it escape this noexcept destructor and terminate()
-                    try
-                    {
-                        ptr->schedule_continuation(*loop);
-                    }
-                    catch (...) // NOLINT(bugprone-empty-catch)
-                    {
-                        // deliberately empty: this destructor must stay noexcept, and there is
-                        // nothing sensible to do with a failed best-effort notification here
-                    }
-                }
+                    ptr->schedule_continuation(*loop);
             }
 
         private:
@@ -161,43 +146,41 @@ namespace ito::async
     template<typename T = void>
     class future
     {
+        // A named member rather than a class local to operator co_await(): a local class can't have the member
+        // template await_suspend() needs.
+        struct awaitable
+        {
+            ito::details::utils::trackable<details::future_state<T>> obj;
+
+            explicit awaitable(ito::details::utils::trackable<details::future_state<T>>&& obj)
+                : obj{std::move(obj)}
+            {
+            }
+
+            ~awaitable() noexcept { obj->continuation = nullptr; }
+
+            awaitable(const awaitable&)            = delete;
+            awaitable& operator=(const awaitable&) = delete;
+
+            awaitable(awaitable&& o) noexcept = delete;
+            awaitable& operator=(awaitable&&) = delete;
+
+            constexpr bool await_ready() noexcept { return obj->value.is_ready(); }
+
+            // Typed handle: resolving the promise queues the awaiting frame's own node, which only ito coroutines have.
+            template<std::derived_from<ito::details::base_promise_type> Promise>
+            void await_suspend(std::coroutine_handle<Promise> h) noexcept
+            {
+                obj->continuation = &h.promise();
+            }
+
+            T await_resume() { return obj->value.get_result(); }
+        };
+
     public:
         friend class promise<T>;
 
-        auto operator co_await() &&
-        {
-            struct awaitable
-            {
-                ito::details::utils::trackable<details::future_state<T>> obj;
-                // lives in the awaiting coroutine's frame, so its queued resume dies with that frame
-                std::optional<ito::details::utils::anchor> frame_anchor{};
-
-                explicit awaitable(ito::details::utils::trackable<details::future_state<T>>&& obj)
-                    : obj{std::move(obj)}
-                {
-                }
-
-                ~awaitable() noexcept { obj->continuation = {}; }
-
-                awaitable(const awaitable&)            = delete;
-                awaitable& operator=(const awaitable&) = delete;
-
-                awaitable(awaitable&& o) noexcept = delete;
-                awaitable& operator=(awaitable&&) = delete;
-
-                constexpr bool await_ready() noexcept { return obj->value.is_ready(); }
-
-                auto await_suspend(std::coroutine_handle<> h) noexcept
-                {
-                    auto [resume, anchor] = ito::details::queued_resume::create(h);
-                    frame_anchor.emplace(std::move(anchor));
-                    obj->continuation = std::move(resume);
-                }
-
-                T await_resume() { return obj->value.get_result(); }
-            };
-            return awaitable{std::move(m_obj)};
-        }
+        auto operator co_await() && { return awaitable{std::move(m_obj)}; }
 
     private:
         explicit future(ito::details::utils::trackable<details::future_state<T>>&& obj)

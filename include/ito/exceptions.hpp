@@ -20,6 +20,7 @@ namespace ito::exceptions
     ITO_EXCEPTION(empty_value);
     ITO_EXCEPTION(invalid_coro_handle_state);
     ITO_EXCEPTION(invalid_loop_state);
+    ITO_EXCEPTION(invalid_condition);
 
 #undef ITO_EXCEPTION
 } // namespace ito::exceptions

@@ -5,15 +5,16 @@
 #include <ito/async/future.hpp>
 #include <ito/async/sleep.hpp>
 #include <ito/coro.hpp>
-#include <ito/exceptions.hpp>
 #include <ito/loop.hpp>
 #include <ito/task.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdlib>
 #include <new>
 #include <optional>
+#include <utility>
 
 namespace
 {
@@ -43,116 +44,69 @@ void operator delete(void* ptr, std::size_t) noexcept
     std::free(ptr); // NOLINT(cppcoreguidelines-no-malloc,cppcoreguidelines-owning-memory)
 }
 
-TEST_CASE("a timer whose transfer to the ready queue fails to allocate still fires later")
+TEST_CASE("sleeping registers and fires its timer without allocating")
 {
     using namespace std::chrono_literals;
 
-    // The transfer only allocates when the ready queue has to grow, which depends on how many entries are queued
-    // ahead of it and on the standard library's deque block size (one entry per block on MSVC, about a dozen on
-    // libstdc++, about a hundred on libc++, which also recycles an emptied front block). So queue a growing number
-    // of live entries ahead of it until the transfer is what has to allocate.
-    bool hit = false;
-    for (int queued = 0; queued < 256 && !hit; ++queued)
-    {
-        ito::loop                      loop{};
-        std::optional<ito::task<void>> sleeper{}; // outlives the failed run, so a lost timer would show
-        bool                           resumed = false;
-        auto [never_resolved, never]           = ito::async::promise<>::create();
-
-        try
-        {
-            loop.run_until_complete([&]() -> ito::coro<> {
-                sleeper.emplace(loop.create_task([](bool* resumed) -> ito::coro<> {
-                    co_await ito::async::sleep_for(1ms);
-                    *resumed = true;
-                }(&resumed)));
-
-                // runs after `sleeper` has started and suspended: waits out its deadline, so the next tick starts by
-                // moving its timer into the ready queue behind `queued` callbacks, and makes that tick's first
-                // allocation fail
-                loop.call_soon([&loop, queued]() noexcept {
-                    const auto deadline = std::chrono::steady_clock::now() + 2ms;
-                    while (std::chrono::steady_clock::now() < deadline)
-                    {
-                    }
-                    for (int i = 0; i < queued; ++i) loop.call_soon([]() noexcept { });
-                    g_fail_next_allocation = true;
-                });
-
-                // keeps this run going until it either throws or runs dry, without a timer of its own
-                co_await std::move(never);
-            }());
-        }
-        catch (const std::bad_alloc&)
-        {
-            // only a failure before `sleeper` ran is the case under test; a later one hit some other allocation
-            hit = !resumed;
-        }
-        catch (const ito::exceptions::empty_value&) // NOLINT(bugprone-empty-catch)
-        {
-            // the transfer had room and didn't allocate: the run ran dry with `never` unresolved, try the next size
-        }
+    ito::loop loop{};
+    bool      nothing_allocated = false;
+    loop.run_until_complete([](bool* nothing_allocated) -> ito::coro<> {
+        // armed across the whole sleep: registering the timer, the loop's wait and the resume must not consume it
+        g_fail_next_allocation = true;
+        co_await ito::async::sleep_for(1ms);
+        *nothing_allocated     = g_fail_next_allocation;
         g_fail_next_allocation = false;
+    }(&nothing_allocated));
 
-        if (hit)
-        {
-            // the failed transfer must have left the timer in place, so the next run still resumes `sleeper`
-            loop.run_until_complete([]() -> ito::coro<> {
-                co_await ito::async::sleep_for(5ms);
-            }());
-            REQUIRE(resumed);
-        }
-    }
-    REQUIRE(hit);
+    REQUIRE(nothing_allocated);
 }
 
-TEST_CASE("a promise whose resume fails to queue still wakes its awaiter once the promise is gone")
+TEST_CASE("resolving a future queues its awaiter without allocating")
 {
-    using namespace std::chrono_literals;
+    ito::loop          loop{};
+    std::optional<int> received{};
+    bool               nothing_allocated = false;
 
-    // As above: queue a growing number of live entries until queuing the awaiter's resume is what has to allocate.
-    bool hit = false;
-    for (int queued = 0; queued < 256 && !hit; ++queued)
-    {
-        ito::loop          loop{};
-        std::optional<int> received{};
+    loop.run_until_complete([&]() -> ito::coro<> {
+        auto [promise, future] = ito::async::promise<int>::create();
+        auto awaiter           = loop.create_task([](ito::async::future<int> f, std::optional<int>* out) -> ito::coro<> {
+            *out = co_await std::move(f);
+        }(std::move(future), &received));
 
-        loop.run_until_complete([&]() -> ito::coro<> {
-            auto [promise, future] = ito::async::promise<int>::create();
-            auto awaiter           = loop.create_task([](ito::async::future<int> f, std::optional<int>* out) -> ito::coro<> {
-                *out = co_await std::move(f);
-            }(std::move(future), &received));
+        // lets `awaiter` start and suspend on its future
+        auto [tick_promise, tick] = ito::async::promise<>::create();
+        const auto resolve_tick   = loop.schedule([&]() noexcept { tick_promise.set_result(); });
+        co_await std::move(tick);
 
-            // lets `awaiter` start and suspend on its future
-            co_await ito::async::sleep_for(1ms);
+        g_fail_next_allocation = true;
+        promise.set_result(42);
+        nothing_allocated      = g_fail_next_allocation;
+        g_fail_next_allocation = false;
 
-            for (int i = 0; i < queued; ++i) loop.call_soon([]() noexcept { });
+        co_await std::move(awaiter);
+    }());
 
-            // the value is set first, then queuing `awaiter`'s resume is the next allocation
-            g_fail_next_allocation = true;
-            try
-            {
-                promise.set_result(42);
-            }
-            catch (const std::bad_alloc&)
-            {
-                hit = true;
-            }
-            g_fail_next_allocation = false;
+    REQUIRE(nothing_allocated);
+    REQUIRE(received == 42);
+}
 
-            if (!hit)
-                co_return; // the resume had room in the queue: try the next size
+TEST_CASE("a callback that fails to allocate throws from schedule() and leaves the loop usable")
+{
+    ito::loop           loop{};
+    std::array<int, 16> padding{}; // too big to store inline, so schedule() allocates
 
-            REQUIRE_FALSE(received.has_value());
+    auto queue_big_callback = [&]() {
+        g_fail_next_allocation = true;
+        return loop.schedule([padding]() noexcept { static_cast<void>(padding); });
+    };
+    REQUIRE_THROWS_AS(queue_big_callback(), std::bad_alloc);
+    g_fail_next_allocation = false;
 
-            // the failed attempt must have left the awaiter registered: destroying the promise queues its resume,
-            // and it observes the value that was set
-            {
-                [[maybe_unused]] const auto dropped = std::move(promise);
-            }
-            co_await std::move(awaiter);
-            REQUIRE(received == 42);
-        }());
-    }
-    REQUIRE(hit);
+    // nothing half-queued is left behind: a callback scheduled afterwards runs, and the run ends normally
+    bool       ran   = false;
+    const auto after = loop.schedule([&ran]() noexcept { ran = true; });
+    loop.run_until_complete([]() -> ito::coro<> {
+        co_return;
+    }());
+    REQUIRE(ran);
 }

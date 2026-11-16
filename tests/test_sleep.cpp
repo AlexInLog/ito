@@ -12,6 +12,7 @@
 
 #include <chrono>
 #include <optional>
+#include <vector>
 
 TEST_CASE("sleep_* blocks until the deadline, then resumes")
 {
@@ -223,4 +224,88 @@ TEST_CASE("a cancelled sleep doesn't keep an otherwise idle loop sleeping")
         ito::exceptions::empty_value
     );
     REQUIRE(std::chrono::steady_clock::now() - start < std::chrono::seconds(1));
+}
+
+TEST_CASE("sleeps with the same deadline resume in the order they started")
+{
+    ito::loop        loop{};
+    std::vector<int> order{};
+    const auto       deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5);
+
+    auto sleeper = [](std::chrono::steady_clock::time_point deadline, int id, std::vector<int>* order) -> ito::coro<> {
+        co_await ito::async::sleep_until(deadline);
+        order->push_back(id);
+    };
+
+    loop.run_until_complete([&]() -> ito::coro<> {
+        auto first  = loop.create_task(sleeper(deadline, 1, &order));
+        auto second = loop.create_task(sleeper(deadline, 2, &order));
+        auto third  = loop.create_task(sleeper(deadline, 3, &order));
+        co_await std::move(first);
+        co_await std::move(second);
+        co_await std::move(third);
+    }());
+
+    REQUIRE(order == std::vector<int>{1, 2, 3});
+}
+
+TEST_CASE("a task destroyed after its timer fired but before it resumed never resumes")
+{
+    ito::loop                      loop{};
+    bool                           resumed = false;
+    std::optional<ito::task<void>> sleeper{};
+
+    loop.run_until_complete([&]() -> ito::coro<> {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5);
+        sleeper.emplace(loop.create_task([](std::chrono::steady_clock::time_point deadline, bool* resumed) -> ito::coro<> {
+            co_await ito::async::sleep_until(deadline);
+            *resumed = true;
+        }(deadline, &resumed)));
+
+        auto [done_promise, done] = ito::async::promise<>::create();
+        std::optional<ito::scheduled_callback> destroy{};
+        std::optional<ito::scheduled_callback> finish{};
+
+        // runs after `sleeper` has started and suspended: waits out the deadline, so the next tick starts by queueing
+        // `sleeper`'s frame behind `destroy`, which then destroys the task while its frame is queued
+        const auto wait = loop.schedule([&]() noexcept {
+            while (std::chrono::steady_clock::now() < deadline)
+            {
+            }
+            destroy.emplace(loop.schedule([&]() noexcept {
+                sleeper.reset();
+                finish.emplace(loop.schedule([&]() noexcept { done_promise.set_result(); }));
+            }));
+        });
+        co_await std::move(done);
+    }());
+
+    REQUIRE_FALSE(sleeper.has_value());
+    REQUIRE_FALSE(resumed);
+}
+
+TEST_CASE("tasks queued or sleeping can outlive their loop")
+{
+    // destroying them after the loop must not touch it: the loop's queues unlinked them when it died (ASan checks)
+    std::optional<ito::task<void>> sleeping{};
+    std::optional<ito::task<void>> not_started{};
+    {
+        ito::loop loop{};
+        loop.run_until_complete([&]() -> ito::coro<> {
+            sleeping.emplace(loop.create_task([]() -> ito::coro<> {
+                co_await ito::async::sleep_for(std::chrono::hours(1));
+            }()));
+
+            // lets `sleeping` start and register its timer
+            auto [tick_promise, tick] = ito::async::promise<>::create();
+            const auto resolve_tick   = loop.schedule([&]() noexcept { tick_promise.set_result(); });
+            co_await std::move(tick);
+
+            not_started.emplace(loop.create_task([]() -> ito::coro<> {
+                co_return;
+            }()));
+        }());
+    }
+    sleeping.reset();
+    not_started.reset();
 }

@@ -55,6 +55,12 @@ namespace ito::details::utils
         using raii_coroutine_handle_base::operator bool;
 
         [[nodiscard]] TPromise* operator->() const { return &get().promise(); }
+        template<typename P = TPromise>
+            requires (!std::is_void_v<P>)
+        [[nodiscard]] P& promise() const
+        {
+            return get().promise();
+        }
 
         template<typename TargetType = TPromise>
             requires (std::is_void_v<TargetType> || std::is_void_v<TPromise> || std::same_as<TargetType, TPromise>)

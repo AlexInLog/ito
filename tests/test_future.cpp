@@ -48,7 +48,7 @@ TEST_CASE("future basics")
 
             loop.run_until_complete([&]() -> ito::coro<> {
                 auto [inner_promise, inner_res] = ito::async::promise<int>::create();
-                loop.call_soon([&]() noexcept { inner_promise.set_result(10); });
+                const auto resolve              = loop.schedule([&]() noexcept { inner_promise.set_result(10); });
                 co_await std::move(inner_res);
             }());
         }
@@ -56,10 +56,13 @@ TEST_CASE("future basics")
 
     SECTION("resolve future before await")
     {
-        const auto res = loop.run_until_complete([&]() -> ito::coro<int> {
+        // held out here so it outlives the coroutine: if awaiting the ready future went through the queue, this would
+        // run first and fail the mock, which expects no call
+        std::optional<ito::scheduled_callback> canary{};
+        const auto                             res = loop.run_until_complete([&]() -> ito::coro<int> {
             auto [promise, fut] = ito::async::promise<int>::create();
             promise.set_result(10);
-            loop.call_soon([&]() noexcept { mock.call(0); });
+            canary.emplace(loop.schedule([&]() noexcept { mock.call(0); }));
             co_return co_await std::move(fut);
         }());
 
@@ -92,23 +95,26 @@ TEST_CASE("future basics")
         );
     }
 
-    SECTION("resolve future inside call_soon")
+    SECTION("resolve future inside a scheduled callback")
     {
         const auto res = loop.run_until_complete([&]() -> ito::coro<int> {
             auto [promise, fut] = ito::async::promise<int>::create();
             int value           = 10;
 
-            loop.call_soon([&]() noexcept { mock.call(0); });
-            loop.call_soon([&]() noexcept {
+            std::optional<ito::scheduled_callback> third{};
+            std::optional<ito::scheduled_callback> fourth{};
+
+            const auto first        = loop.schedule([&]() noexcept { mock.call(0); });
+            const auto second       = loop.schedule([&]() noexcept {
                 mock.call(1);
 
                 REQUIRE_FALSE(promise.is_settled());
-                loop.call_soon([&]() noexcept { mock.call(3); });
+                third.emplace(loop.schedule([&]() noexcept { mock.call(3); }));
                 promise.set_result(value);
                 REQUIRE(promise.is_settled());
-                loop.call_soon([&]() noexcept { mock.call(4); });
+                fourth.emplace(loop.schedule([&]() noexcept { mock.call(4); }));
             });
-            loop.call_soon([&]() noexcept { mock.call(2); });
+            const auto after_second = loop.schedule([&]() noexcept { mock.call(2); });
 
             REQUIRE_CALL(mock, call(0)).IN_SEQUENCE(s);
             REQUIRE_CALL(mock, call(1)).IN_SEQUENCE(s);
@@ -205,7 +211,7 @@ TEST_CASE("future basics")
             // hop through the loop once so `task` actually starts and suspends inside
             // `co_await future`, rather than being cancelled before it ever ran
             auto [tick_promise, tick] = ito::async::promise<>::create();
-            loop.call_soon([&]() noexcept { tick_promise.set_result(); });
+            const auto resolve_tick   = loop.schedule([&]() noexcept { tick_promise.set_result(); });
             co_await std::move(tick);
 
             // drop `promise` while `task` is still suspended awaiting its `future`: the

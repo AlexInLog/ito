@@ -30,16 +30,20 @@ What exists right now:
   without being awaited, the exception is dropped silently.
 - `ito::async::sleep_for`/`ito::async::sleep_until` — suspend a coroutine until a duration elapses or a
   `steady_clock` deadline is reached, backed by a timer queue on `ito::loop`.
-- `loop.call_soon(callback)` — queues a plain callback to run on the next tick. Callbacks must be `noexcept`
-  (enforced at compile time): nothing awaits a callback, so there's nowhere to deliver its exception, and errors
-  belong in coroutines and promises instead. Callbacks are stored move-only, and one queued from a coroutine can run
-  after that coroutine has finished, so it should own what it touches rather than capture the coroutine's locals by
-  reference. Resolving a promise from a callback is the typical use:
+- A `future<T>` or a sleep can only be awaited from an ito coroutine (`coro<T>`, or a task's body): waking it queues
+  the awaiting coroutine's own node, which other coroutine types don't have. Awaiting one from a different coroutine
+  type is a compile error.
+- `loop.schedule(callback)` — queues a plain callback to run on the next tick and returns an
+  `ito::scheduled_callback`. Destroying that handle before the callback runs cancels it, so keep it alive until
+  then; the compiler warns if you discard it. Callbacks must be `noexcept` (enforced at compile time): nothing awaits
+  a callback, so there's nowhere to deliver its exception, and errors belong in coroutines and promises instead.
+  Because a callback dies with its handle, it may reference whatever outlives the handle, such as the locals of the
+  coroutine that holds it. Resolving a promise from a callback is the typical use:
 
   ```cpp
   auto [promise, future] = ito::async::promise<int>::create();
-  loop.call_soon([p = std::move(promise)]() mutable noexcept { p.set_result(42); });
-  const int value = co_await std::move(future);
+  const auto resolve     = loop.schedule([&]() noexcept { promise.set_result(42); });
+  const int  value       = co_await std::move(future);
   ```
 
 What's *not* here yet (see [Roadmap](#roadmap)): multi-threading, work-stealing, I/O, cooperative cancellation.
@@ -48,7 +52,7 @@ What's *not* here yet (see [Roadmap](#roadmap)): multi-threading, work-stealing,
 
 - `ito::loop` runs in ticks. At the start of a tick it moves every timer whose deadline has passed onto the ready
   queue, then runs exactly the entries that were queued at that point. Anything scheduled while the tick runs
-  (`call_soon`, `create_task`, resumes) waits for the next tick, in FIFO order.
+  (`schedule`, `create_task`, resumes) waits for the next tick, in FIFO order.
 - When a `coro<T>` or `task<T>` finishes, the coroutine awaiting it resumes right away, without a trip through the
   queue.
 - Resolving or destroying a `promise<T>` never resumes the coroutine awaiting its `future<T>` inside that call: the

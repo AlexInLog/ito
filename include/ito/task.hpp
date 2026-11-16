@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ito/coro.hpp>
-#include <ito/details/utils/anchored.hpp>
 #include <ito/details/utils/raii_coroutine_handle.hpp>
 #include <ito/fwd.hpp>
 
@@ -13,9 +12,8 @@ namespace ito
     class [[nodiscard("ito::task can't be discarded")]] task final
     {
     private:
-        task(details::utils::raii_coroutine_handle<> h, details::utils::anchor anchor) noexcept
+        explicit task(details::utils::raii_coroutine_handle<> h) noexcept
             : m_h{std::move(h)}
-            , m_anchor{std::move(anchor)}
         {
         }
 
@@ -33,9 +31,7 @@ namespace ito
         {
             struct awaitable
             {
-                // the frame and its anchor move together: the task's queued start may still be pending when it's awaited
                 details::utils::raii_coroutine_handle<> _h;
-                details::utils::anchor                  _anchor;
 
             private:
                 typename coro<T>::promise_type& cast() { return _h.get<typename coro<T>::promise_type>().promise(); }
@@ -53,14 +49,12 @@ namespace ito
             };
 
             if (m_h) [[likely]]
-                return awaitable{std::move(m_h), std::move(m_anchor)};
+                return awaitable{std::move(m_h)};
 
             details::throw_empty_coro();
         }
 
     private:
-        // Owns the frame; m_anchor is what the queued start is anchored to, so destroying the task cancels that start.
         details::utils::raii_coroutine_handle<> m_h;
-        details::utils::anchor                  m_anchor;
     };
 } // namespace ito

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ito/details/ready_node.hpp>
 #include <ito/details/utils/outcome.hpp>
 #include <ito/details/utils/raii_coroutine_handle.hpp>
 #include <ito/exceptions.hpp>
@@ -18,8 +19,14 @@ namespace ito
             throw exceptions::invalid_coro_handle_state{"no coroutine handle when trying to co_await coro"};
         }
 
-        struct base_promise_type
+        struct base_promise_type : public intrusive_ready_node
         {
+            base_promise_type() noexcept                           = default;
+            base_promise_type(const base_promise_type&)            = delete;
+            base_promise_type(base_promise_type&&)                 = delete;
+            base_promise_type& operator=(const base_promise_type&) = delete;
+            base_promise_type& operator=(base_promise_type&&)      = delete;
+
             std::coroutine_handle<> continuation = std::noop_coroutine();
 
             static constexpr std::suspend_always initial_suspend() noexcept { return {}; }
@@ -36,6 +43,11 @@ namespace ito
                 };
                 return awaitable{continuation};
             }
+
+        protected:
+            // Polymorphic (run() is virtual) but only ever destroyed as the final coro<T>::promise_type, by the frame,
+            // so this and the promise bases below have protected non-virtual destructors.
+            ~base_promise_type() noexcept = default;
         };
 
         template<typename T>
@@ -47,6 +59,16 @@ namespace ito
 
             using ito::details::utils::outcome<T>::get_result;
             using ito::details::utils::outcome<T>::is_ready;
+
+        protected:
+            typed_promise_type() noexcept  = default;
+            ~typed_promise_type() noexcept = default;
+
+        public:
+            typed_promise_type(const typed_promise_type&)            = delete;
+            typed_promise_type(typed_promise_type&&)                 = delete;
+            typed_promise_type& operator=(const typed_promise_type&) = delete;
+            typed_promise_type& operator=(typed_promise_type&&)      = delete;
         };
 
         template<typename T>
@@ -54,12 +76,32 @@ namespace ito
         {
             void return_value(T&& v) { this->set_result(std::move(v)); }
             void return_value(const T& v) { this->set_result(v); }
+
+        protected:
+            promise_type() noexcept  = default;
+            ~promise_type() noexcept = default;
+
+        public:
+            promise_type(const promise_type&)            = delete;
+            promise_type(promise_type&&)                 = delete;
+            promise_type& operator=(const promise_type&) = delete;
+            promise_type& operator=(promise_type&&)      = delete;
         };
 
         template<>
         struct promise_type<void> : public typed_promise_type<void>
         {
             void return_void() { this->set_result(); }
+
+        protected:
+            promise_type() noexcept  = default;
+            ~promise_type() noexcept = default;
+
+        public:
+            promise_type(const promise_type&)            = delete;
+            promise_type(promise_type&&)                 = delete;
+            promise_type& operator=(const promise_type&) = delete;
+            promise_type& operator=(promise_type&&)      = delete;
         };
     } // namespace details
 
@@ -72,6 +114,10 @@ namespace ito
         struct promise_type final : public details::promise_type<T>
         {
             coro get_return_object() { return coro{std::coroutine_handle<promise_type>::from_promise(*this)}; }
+
+            // Overridden here, in the concrete promise type, because from_promise() needs the coroutine's actual
+            // promise object: calling it on a base subobject would be UB.
+            void run() noexcept override { std::coroutine_handle<promise_type>::from_promise(*this).resume(); }
         };
 
         auto operator co_await() &&
